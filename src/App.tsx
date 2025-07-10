@@ -8,10 +8,15 @@ import ReactFlow, {
   MiniMap,
   Background,
   MarkerType,
+  updateEdge,
+  applyNodeChanges,
+  applyEdgeChanges,
+  type NodeChange,
+  type EdgeChange,
   type Connection,
   type Edge,
   type ReactFlowInstance,
-  type Node,
+  type Node as FlowNode, // Renamed to avoid conflict with PetriNode
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box } from '@mui/material';
@@ -20,6 +25,7 @@ import Sidebar from './Sidebar';
 import { toPNML, fromPNML } from './pnml';
 import PlaceNode from './PlaceNode';
 import TransitionNode from './TransitionNode';
+import { PetriNet, type PetriNode, type Place, type Transition as PetriTransition } from './petri-net'; // Added
 import './App.css';
 
 const nodeTypes = {
@@ -27,7 +33,8 @@ const nodeTypes = {
   transition: TransitionNode,
 };
 
-const initialNodes: Node[] = [
+// Initial state for ReactFlow nodes
+const initialFlowNodes: FlowNode[] = [
   {
     id: '1',
     type: 'place',
@@ -48,45 +55,100 @@ const initialNodes: Node[] = [
   },
 ];
 
-const initialEdges: Edge[] = [
+// Initial state for ReactFlow edges
+const initialFlowEdges: Edge[] = [
   { id: 'e1-2', source: '1', target: '2', markerEnd: { type: MarkerType.ArrowClosed } },
   { id: 'e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
-let id = 4;
-const getId = () => `${id++}`;
+let idCounter = 4; // Renamed for clarity
+const getId = () => `${idCounter++}`;
 
 function PetriNetEditor() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  // Holds the PetriNet logic instance
+  const petriNetRef = useRef<PetriNet>(new PetriNet(initialFlowNodes, initialFlowEdges));
+
+  const [nodes, setNodes] = useState<FlowNode[]>(initialFlowNodes);
+  const [edges, setEdges] = useState<Edge[]>(initialFlowEdges);
+
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const simulationInterval = useRef<number | null>(null);
 
-  // Validate connections to enforce Petri net constraints
+  // Synchronize PetriNet instance when nodes/edges are externally changed (e.g. import)
+  useEffect(() => {
+    petriNetRef.current = new PetriNet(nodes, edges);
+  }, [nodes, edges]);
+
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setNodes((currentNodes) => {
+        const nextNodes = applyNodeChanges(changes, currentNodes);
+        // Sync changes with PetriNet instance
+        changes.forEach(change => {
+          if (change.type === 'remove') {
+            petriNetRef.current.removeNode(change.id);
+          }
+          // Position/dimension changes are handled by ReactFlow, data changes by specific handlers
+        });
+        return nextNodes;
+      });
+    },
+    [setNodes]
+  );
+
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      setEdges((currentEdges) => {
+        const nextEdges = applyEdgeChanges(changes, currentEdges);
+        // Sync changes with PetriNet instance
+        changes.forEach(change => {
+          if (change.type === 'remove') {
+            petriNetRef.current.removeEdge(change.id);
+          }
+        });
+        return nextEdges;
+      });
+    },
+    [setEdges]
+  );
+
   const isValidConnection = useCallback(
     (connection: Connection) => {
       const sourceNode = nodes.find((node) => node.id === connection.source);
       const targetNode = nodes.find((node) => node.id === connection.target);
+      if (!sourceNode || !targetNode) return false;
 
-      if (!sourceNode || !targetNode) {
-        return false;
-      }
+      // Use PetriNet's validation logic
+      // Need to cast ReactFlow node types to something PetriNet understands if they differ
+      // Assuming types 'place' and 'transition' are consistent
+      const sourcePetriNode = petriNetRef.current.getNodeData(connection.source!)
+        ? { id: connection.source!, type: sourceNode.type, data: sourceNode.data } as PetriNode
+        : undefined;
+      const targetPetriNode = petriNetRef.current.getNodeData(connection.target!)
+        ? { id: connection.target!, type: targetNode.type, data: targetNode.data } as PetriNode
+        : undefined;
 
-      // Places can only connect to transitions, and transitions can only connect to places
-      if (sourceNode.type === targetNode.type) {
-        return false;
-      }
+      if (!sourcePetriNode || !targetPetriNode) return false; // Should not happen if nodes exist
 
-      return true;
+      return petriNetRef.current.isValidConnection(sourcePetriNode, targetPetriNode);
     },
-    [nodes]
+    [nodes] // Dependency on nodes to find source/target types
   );
 
   const onConnect = useCallback(
-    (params: Edge | Connection) =>
-      setEdges((eds) => addEdge({ ...params, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
+    (params: Edge | Connection) => {
+      const newEdge = { ...params, id: getId(), markerEnd: { type: MarkerType.ArrowClosed } } as Edge;
+      try {
+        petriNetRef.current.addEdge(newEdge);
+        setEdges((eds) => addEdge(newEdge, eds));
+      } catch (error) {
+        console.error("Failed to add edge:", error);
+        // Optionally show an error to the user
+      }
+    },
     [setEdges],
   );
 
@@ -99,112 +161,87 @@ function PetriNetEditor() {
     (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
 
-      if (!reactFlowWrapper.current || !reactFlowInstance) {
-        return;
-      }
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
-      const type = event.dataTransfer.getData('application/reactflow');
+      if (!reactFlowWrapper.current || !reactFlowInstance) return;
 
-      // check if the dropped element is valid
-      if (typeof type === 'undefined' || !type) {
-        return;
-      }
+      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      const type = event.dataTransfer.getData('application/reactflow') as 'place' | 'transition';
+
+      if (typeof type === 'undefined' || !type || (type !== 'place' && type !== 'transition')) return;
 
       const position = reactFlowInstance.project({
         x: event.clientX - reactFlowBounds.left,
         y: event.clientY - reactFlowBounds.top,
       });
-      const newNode: Node = {
-        id: getId(),
-        type,
-        position,
-        data: {
-          label: `${type === 'place' ? 'P' : 'T'}${id}`,
-          ...(type === 'place' && { tokens: 0 }),
-        },
+
+      const newId = getId();
+      const newNodeLabel = `${type === 'place' ? 'P' : 'T'}${idCounter}`; // Use current idCounter for label
+
+      const newNodeData = {
+        label: newNodeLabel,
+        ...(type === 'place' && { tokens: 0 }),
       };
 
-      setNodes((nds) => nds.concat(newNode));
+      const newFlowNode: FlowNode = {
+        id: newId,
+        type,
+        position,
+        data: newNodeData,
+      };
+
+      // Add to PetriNet instance first
+      petriNetRef.current.addNode({
+        id: newId,
+        type: type,
+        data: newNodeData,
+      } as PetriNode);
+
+      setNodes((nds) => nds.concat(newFlowNode));
     },
-    [reactFlowInstance, setNodes]
+    [reactFlowInstance, setNodes] // Removed dependency on idCounter from here
   );
 
   const handleFire = useCallback(
     (transitionId: string) => {
-      setNodes((currentNodes) => {
-        const newNodes = [...currentNodes];
-        const transitionNodeIndex = newNodes.findIndex((n) => n.id === transitionId);
-        if (transitionNodeIndex === -1) return currentNodes;
-
-        const inputEdges = edges.filter((e) => e.target === transitionId);
-        const outputEdges = edges.filter((e) => e.source === transitionId);
-
-        const inputPlaceIndices = inputEdges.map((edge) => newNodes.findIndex((n) => n.id === edge.source));
-        const outputPlaceIndices = outputEdges.map((edge) => newNodes.findIndex((n) => n.id === edge.target));
-
-        const canFire = inputPlaceIndices.every((index) => newNodes[index].data.tokens > 0);
-
-        if (canFire) {
-          inputPlaceIndices.forEach((index) => {
-            newNodes[index] = {
-              ...newNodes[index],
-              data: { ...newNodes[index].data, tokens: newNodes[index].data.tokens - 1 },
-            };
-          });
-          outputPlaceIndices.forEach((index) => {
-            newNodes[index] = {
-              ...newNodes[index],
-              data: { ...newNodes[index].data, tokens: newNodes[index].data.tokens + 1 },
-            };
-          });
-        } else {
-          console.log(`Transition ${transitionId} cannot fire: not enough tokens.`);
-        }
-
-        return newNodes;
-      });
+      const result = petriNetRef.current.fireTransition(transitionId);
+      if (result && result.updatedNodesData) {
+        setNodes((currentNodes) =>
+          currentNodes.map((node) => {
+            const update = result.updatedNodesData.find(u => u.id === node.id);
+            if (update && node.type === 'place') {
+              return { ...node, data: { ...node.data, tokens: update.tokens } };
+            }
+            return node;
+          })
+        );
+      } else {
+        console.log(`Transition ${transitionId} cannot fire or does not exist.`);
+      }
     },
-    [edges, setNodes]
+    [setNodes]
   );
 
-  const findFireableTransition = useCallback(() => {
-    const transitions = nodes.filter((n) => n.type === 'transition');
-    const fireableTransitions = transitions.filter((transition) => {
-      const inputEdges = edges.filter((e) => e.target === transition.id);
-      if (inputEdges.length === 0) return false; // Transitions must have inputs to be enabled
-      const canFire = inputEdges.every((edge) => {
-        const sourceNode = nodes.find((n) => n.id === edge.source);
-        return sourceNode && sourceNode.data.tokens > 0;
-      });
-      return canFire;
-    });
-
-    if (fireableTransitions.length > 0) {
-      // Pick a random fireable transition
-      const randomIndex = Math.floor(Math.random() * fireableTransitions.length);
-      return fireableTransitions[randomIndex].id;
-    }
-
-    return null;
-  }, [nodes, edges]);
-
   const runSimulationStep = useCallback(() => {
-    const fireableId = findFireableTransition();
-    if (fireableId) {
-      handleFire(fireableId);
+    const fireableTransitions = petriNetRef.current.getFireableTransitions();
+    if (fireableTransitions.length > 0) {
+      const randomIndex = Math.floor(Math.random() * fireableTransitions.length);
+      const transitionToFire = fireableTransitions[randomIndex];
+      handleFire(transitionToFire.id);
     } else {
-      // Stop the simulation if no more transitions can be fired
       if (simulationInterval.current) {
         clearInterval(simulationInterval.current);
       }
       setIsRunning(false);
+      console.log("Simulation stopped: No fireable transitions.");
     }
-  }, [findFireableTransition, handleFire]);
+  }, [handleFire]); // Removed direct dependencies on nodes/edges, relies on petriNetRef
 
   const handleRun = useCallback(() => {
+    if (isRunning) return;
     setIsRunning(true);
+    // Initial step, then interval
+    runSimulationStep();
     simulationInterval.current = window.setInterval(runSimulationStep, 1000);
-  }, [runSimulationStep]);
+  }, [runSimulationStep, isRunning]);
 
   const handleStop = useCallback(() => {
     setIsRunning(false);
@@ -215,7 +252,6 @@ function PetriNetEditor() {
   }, []);
 
   useEffect(() => {
-    // Cleanup on unmount
     return () => {
       if (simulationInterval.current) {
         clearInterval(simulationInterval.current);
@@ -223,24 +259,22 @@ function PetriNetEditor() {
     };
   }, []);
 
-  const setTokens = useCallback(
+  const setTokensCallback = useCallback(
     (nodeId: string, tokens: number) => {
-      setNodes((currentNodes) => {
-        const newNodes = [...currentNodes];
-        const nodeIndex = newNodes.findIndex((n) => n.id === nodeId);
-        if (nodeIndex > -1) {
-          newNodes[nodeIndex] = {
-            ...newNodes[nodeIndex],
-            data: { ...newNodes[nodeIndex].data, tokens },
-          };
-        }
-        return newNodes;
-      });
+      const success = petriNetRef.current.setTokens(nodeId, tokens);
+      if (success) {
+        setNodes((nds) =>
+          nds.map((node) =>
+            node.id === nodeId ? { ...node, data: { ...node.data, tokens } } : node
+          )
+        );
+      }
     },
     [setNodes]
   );
 
-  const nodesWithSimData = useMemo(() => {
+  // Prepare nodes for ReactFlow, injecting callbacks
+  const nodesWithReactFlowData = useMemo(() => {
     return nodes.map((node) => {
       if (node.type === 'transition') {
         return {
@@ -248,6 +282,8 @@ function PetriNetEditor() {
           data: {
             ...node.data,
             onFire: () => handleFire(node.id),
+            // Consider adding isFireable state for styling:
+            // isFireable: petriNetRef.current.isTransitionFireable(node.id)
           },
         };
       }
@@ -256,15 +292,16 @@ function PetriNetEditor() {
           ...node,
           data: {
             ...node.data,
-            setTokens: (tokens: number) => setTokens(node.id, tokens),
+            setTokens: (tokens: number) => setTokensCallback(node.id, tokens),
           },
         };
       }
       return node;
     });
-  }, [nodes, handleFire, setTokens]);
+  }, [nodes, handleFire, setTokensCallback]); // isFireable would add petriNetRef.current to deps, potentially causing re-renders
 
   const handleExport = useCallback(() => {
+    // Use nodes and edges from ReactFlow state as they have positions
     const pnml = toPNML(nodes, edges);
     const blob = new Blob([pnml], { type: 'application/xml' });
     const url = URL.createObjectURL(blob);
@@ -282,18 +319,19 @@ function PetriNetEditor() {
         const pnmlContent = event.target?.result as string;
         const { nodes: importedNodes, edges: importedEdges } = fromPNML(pnmlContent);
         
-        // Update the ID counter to avoid conflicts
-        const maxId = Math.max(
-          ...importedNodes.map(node => parseInt(node.id.replace(/\D/g, '')) || 0),
-          ...importedEdges.map(edge => parseInt(edge.id.replace(/\D/g, '')) || 0),
-          id
-        );
-        id = maxId + 1;
+        const maxIdFromNodes = importedNodes.length > 0
+            ? Math.max(...importedNodes.map(node => parseInt(node.id.replace(/\D/g,''), 10) || 0))
+            : 0;
+        const maxIdFromEdges = importedEdges.length > 0
+            ? Math.max(...importedEdges.map(edge => parseInt(edge.id.replace(/\D/g,''), 10) || 0))
+            : 0;
+        idCounter = Math.max(maxIdFromNodes, maxIdFromEdges, idCounter) + 1;
         
+        // Update ReactFlow state
         setNodes(importedNodes);
         setEdges(importedEdges);
+        // PetriNet instance will be updated by the useEffect hook watching nodes/edges
         
-        // Fit the view to show all imported nodes
         setTimeout(() => {
           if (reactFlowInstance) {
             reactFlowInstance.fitView();
@@ -307,16 +345,49 @@ function PetriNetEditor() {
     reader.readAsText(file);
   }, [setNodes, setEdges, reactFlowInstance]);
 
+  // Custom onNodesChange and onEdgesChange to sync with PetriNet
+  const customOnNodesChange = useCallback((changes: NodeChange[]) => {
+     setNodes(prevNodes => {
+        const nextNodes = applyNodeChanges(changes, prevNodes);
+        changes.forEach(change => {
+            if (change.type === 'remove' && change.id) {
+                petriNetRef.current.removeNode(change.id);
+            }
+            // Add/select/move changes are primarily UI, model updates if needed
+        });
+        return nextNodes;
+    });
+  }, [setNodes]);
+
+  const customOnEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setEdges(prevEdges => {
+        const nextEdges = applyEdgeChanges(changes, prevEdges);
+        changes.forEach(change => {
+            if (change.type === 'remove' && change.id) {
+                petriNetRef.current.removeEdge(change.id);
+            }
+        });
+        return nextEdges;
+    });
+  }, [setEdges]);
+
+
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <Sidebar onExport={handleExport} onImport={handleImport} onRun={handleRun} onStop={handleStop} isRunning={isRunning} />
-      <Box component="main" sx={{ flexGrow: 1 }}>
-        <div ref={reactFlowWrapper} style={{ width: '1500px', height: '1500px' }}>
+      <Box component="main" sx={{ flexGrow: 1, height: '100%' }}> {/* Changed width/height */}
+        <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%' }}> {/* Changed width/height */}
           <ReactFlow
-            nodes={nodesWithSimData}
+            nodes={nodesWithReactFlowData}
             edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={customOnNodesChange} // Use custom handler
+            onEdgesChange={customOnEdgesChange} // Use custom handler
+            onEdgeUpdate={(oldEdge, newConnection) => { // Handle edge updates
+                const updatedEdge = updateEdge(oldEdge, newConnection, edges);
+                petriNetRef.current.removeEdge(oldEdge.id);
+                petriNetRef.current.addEdge(updatedEdge);
+                setEdges((es) => es.map(e => e.id === oldEdge.id ? updatedEdge : e));
+            }}
             onConnect={onConnect}
             onInit={setReactFlowInstance}
             onDrop={onDrop}
