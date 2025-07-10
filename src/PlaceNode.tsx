@@ -14,7 +14,12 @@ const PlaceNode = ({ data }: { data: { label: string; tokens: number; setTokens:
         textAlign: 'center',
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: '#555' }} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={{ background: '#555' }}
+        data-testid="place-handle-top"
+      />
       <CardContent>
         <Typography variant="subtitle1" component="div">
           {data.label}
@@ -29,7 +34,12 @@ const PlaceNode = ({ data }: { data: { label: string; tokens: number; setTokens:
           Add
         </Button>
       </CardContent>
-      <Handle type="source" position={Position.Bottom} style={{ background: '#555' }} />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={{ background: '#555' }}
+        data-testid="place-handle-bottom"
+      />
     </Card>
   );
 };
