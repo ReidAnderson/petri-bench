@@ -17,7 +17,7 @@ import 'reactflow/dist/style.css';
 import { Box } from '@mui/material';
 
 import Sidebar from './Sidebar';
-import { toPNML } from './pnml';
+import { toPNML, fromPNML } from './pnml';
 import PlaceNode from './PlaceNode';
 import TransitionNode from './TransitionNode';
 import './App.css';
@@ -275,9 +275,41 @@ function PetriNetEditor() {
     URL.revokeObjectURL(url);
   }, [nodes, edges]);
 
+  const handleImport = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const pnmlContent = event.target?.result as string;
+        const { nodes: importedNodes, edges: importedEdges } = fromPNML(pnmlContent);
+        
+        // Update the ID counter to avoid conflicts
+        const maxId = Math.max(
+          ...importedNodes.map(node => parseInt(node.id.replace(/\D/g, '')) || 0),
+          ...importedEdges.map(edge => parseInt(edge.id.replace(/\D/g, '')) || 0),
+          id
+        );
+        id = maxId + 1;
+        
+        setNodes(importedNodes);
+        setEdges(importedEdges);
+        
+        // Fit the view to show all imported nodes
+        setTimeout(() => {
+          if (reactFlowInstance) {
+            reactFlowInstance.fitView();
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Error importing PNML file:', error);
+        alert('Error importing PNML file. Please check the file format.');
+      }
+    };
+    reader.readAsText(file);
+  }, [setNodes, setEdges, reactFlowInstance]);
+
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar onExport={handleExport} onRun={handleRun} onStop={handleStop} isRunning={isRunning} />
+      <Sidebar onExport={handleExport} onImport={handleImport} onRun={handleRun} onStop={handleStop} isRunning={isRunning} />
       <Box component="main" sx={{ flexGrow: 1 }}>
         <div ref={reactFlowWrapper} style={{ width: '1500px', height: '1500px' }}>
           <ReactFlow

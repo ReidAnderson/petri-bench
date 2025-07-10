@@ -10,7 +10,7 @@ import {
   Divider,
   Box,
 } from '@mui/material';
-import { Grain, AllOut, FileUpload, PlayArrow, Stop } from '@mui/icons-material';
+import { Grain, AllOut, FileUpload, FileDownload, PlayArrow, Stop } from '@mui/icons-material';
 
 const onDragStart = (event: React.DragEvent<HTMLElement>, nodeType: string) => {
   event.dataTransfer.setData('application/reactflow', nodeType);
@@ -19,15 +19,26 @@ const onDragStart = (event: React.DragEvent<HTMLElement>, nodeType: string) => {
 
 const Sidebar = ({
   onExport,
+  onImport,
   onRun,
   onStop,
   isRunning,
 }: {
   onExport: () => void;
+  onImport: (file: File) => void;
   onRun: () => void;
   onStop: () => void;
   isRunning: boolean;
 }) => {
+  const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      onImport(file);
+    }
+    // Reset the input value so the same file can be selected again
+    event.target.value = '';
+  };
+
   return (
     <Drawer
       variant="permanent"
@@ -72,11 +83,29 @@ const Sidebar = ({
       </List>
       <Divider />
       <Box sx={{ p: 2 }}>
+        <input
+          type="file"
+          accept=".pnml,.xml"
+          onChange={handleFileInput}
+          style={{ display: 'none' }}
+          id="import-file-input"
+        />
+        <label htmlFor="import-file-input">
+          <Button
+            variant="outlined"
+            startIcon={<FileDownload />}
+            component="span"
+            fullWidth
+          >
+            Import PNML
+          </Button>
+        </label>
         <Button
           variant="contained"
           startIcon={<FileUpload />}
           onClick={onExport}
           fullWidth
+          sx={{ mt: 1 }}
         >
           Export to PNML
         </Button>
