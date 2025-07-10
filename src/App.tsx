@@ -7,6 +7,7 @@ import ReactFlow, {
   Controls,
   MiniMap,
   Background,
+  MarkerType,
   type Connection,
   type Edge,
   type ReactFlowInstance,
@@ -48,8 +49,8 @@ const initialNodes: Node[] = [
 ];
 
 const initialEdges: Edge[] = [
-  { id: 'e1-2', source: '1', target: '2' },
-  { id: 'e2-3', source: '2', target: '3' },
+  { id: 'e1-2', source: '1', target: '2', markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: 'e2-3', source: '2', target: '3', markerEnd: { type: MarkerType.ArrowClosed } },
 ];
 
 let id = 4;
@@ -63,8 +64,29 @@ function PetriNetEditor() {
   const [isRunning, setIsRunning] = useState(false);
   const simulationInterval = useRef<number | null>(null);
 
+  // Validate connections to enforce Petri net constraints
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      const sourceNode = nodes.find((node) => node.id === connection.source);
+      const targetNode = nodes.find((node) => node.id === connection.target);
+
+      if (!sourceNode || !targetNode) {
+        return false;
+      }
+
+      // Places can only connect to transitions, and transitions can only connect to places
+      if (sourceNode.type === targetNode.type) {
+        return false;
+      }
+
+      return true;
+    },
+    [nodes]
+  );
+
   const onConnect = useCallback(
-    (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Edge | Connection) =>
+      setEdges((eds) => addEdge({ ...params, markerEnd: { type: MarkerType.ArrowClosed } }, eds)),
     [setEdges],
   );
 
@@ -268,6 +290,7 @@ function PetriNetEditor() {
             onDrop={onDrop}
             onDragOver={onDragOver}
             nodeTypes={nodeTypes}
+            isValidConnection={isValidConnection}
             fitView
           >
             <Controls />
