@@ -83,7 +83,7 @@ test.describe('PNML Import/Export', () => {
 
     // Export the current state
     const downloadPromise = page.waitForEvent('download');
-    await page.locator('button:has-text("Export to PNML")').click();
+    await page.locator('button:has-text("Export PNML")').click();
     const download = await downloadPromise;
     
     // Save the downloaded file

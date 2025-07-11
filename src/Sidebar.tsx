@@ -3,14 +3,27 @@ import {
   Drawer,
   List,
   ListItem,
+  ListItemButton, // Changed for better interaction
   ListItemIcon,
   ListItemText,
   Button,
   Typography,
   Divider,
   Box,
+  ListSubheader, // Added for grouping
+  Tooltip, // Added for hints
 } from '@mui/material';
-import { Grain, AllOut, FileUpload, FileDownload, PlayArrow, Stop } from '@mui/icons-material';
+import {
+  Grain,
+  AllOut,
+  FileUpload,
+  FileDownload,
+  PlayArrow,
+  Stop,
+  SettingsInputComponent, // Example for a new icon if needed
+} from '@mui/icons-material';
+
+const drawerWidth = 260; // Slightly wider for comfort
 
 const onDragStart = (event: React.DragEvent<HTMLElement>, nodeType: string) => {
   event.dataTransfer.setData('application/reactflow', nodeType);
@@ -35,8 +48,7 @@ const Sidebar = ({
     if (file) {
       onImport(file);
     }
-    // Reset the input value so the same file can be selected again
-    event.target.value = '';
+    event.target.value = ''; // Reset for same file selection
   };
 
   return (
@@ -44,45 +56,59 @@ const Sidebar = ({
       variant="permanent"
       anchor="left"
       sx={{
-        width: 240,
+        width: drawerWidth,
         flexShrink: 0,
         '& .MuiDrawer-paper': {
-          width: 240,
+          width: drawerWidth,
           boxSizing: 'border-box',
         },
       }}
     >
-      <Box sx={{ p: 2 }}>
+      <Box sx={{ p: 2, textAlign: 'center' }}>
         <Typography variant="h6" component="div">
-          Petri Net Bench
+          Petri Net Sim
         </Typography>
-        <Typography variant="body2">Drag nodes to the canvas.</Typography>
       </Box>
       <Divider />
-      <List>
-        <ListItem
-          onDragStart={(event) => onDragStart(event, 'place')}
-          draggable
-          sx={{ cursor: 'grab' }}
-        >
-          <ListItemIcon>
-            <Grain />
-          </ListItemIcon>
-          <ListItemText primary="Place" />
-        </ListItem>
-        <ListItem
-          onDragStart={(event) => onDragStart(event, 'transition')}
-          draggable
-          sx={{ cursor: 'grab' }}
-        >
-          <ListItemIcon>
-            <AllOut />
-          </ListItemIcon>
-          <ListItemText primary="Transition" />
-        </ListItem>
+
+      {/* Node Palette */}
+      <List
+        subheader={
+          <ListSubheader component="div" sx={{ bgcolor: 'inherit' }}> {/* Make subheader less obtrusive */}
+            Node Palette
+          </ListSubheader>
+        }
+      >
+        <Tooltip title="Drag to add a Place node" placement="right">
+          <ListItemButton // Changed from ListItem for hover effects & better semantics
+            onDragStart={(event) => onDragStart(event, 'place')}
+            draggable
+            sx={{ cursor: 'grab', '&:hover': { bgcolor: 'action.hover' } }}
+          >
+            <ListItemIcon sx={{ minWidth: 40}}> {/* Ensure icons align */}
+              <Grain />
+            </ListItemIcon>
+            <ListItemText primary="Place" />
+          </ListItemButton>
+        </Tooltip>
+        <Tooltip title="Drag to add a Transition node" placement="right">
+          <ListItemButton // Changed from ListItem
+            onDragStart={(event) => onDragStart(event, 'transition')}
+            draggable
+            sx={{ cursor: 'grab', '&:hover': { bgcolor: 'action.hover' } }}
+          >
+            <ListItemIcon sx={{ minWidth: 40}}>
+              <AllOut />
+            </ListItemIcon>
+            <ListItemText primary="Transition" />
+          </ListItemButton>
+        </Tooltip>
       </List>
       <Divider />
-      <Box sx={{ p: 2 }}>
+
+      {/* File Operations */}
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}> {/* Added gap */}
+        <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'text.secondary' }}>File Operations</Typography>
         <input
           type="file"
           accept=".pnml,.xml"
@@ -90,9 +116,9 @@ const Sidebar = ({
           style={{ display: 'none' }}
           id="import-file-input"
         />
-        <label htmlFor="import-file-input">
+        <label htmlFor="import-file-input" style={{ width: '100%'}}>
           <Button
-            variant="outlined"
+            variant="outlined" // Kept outlined for distinction
             startIcon={<FileDownload />}
             component="span"
             fullWidth
@@ -101,38 +127,48 @@ const Sidebar = ({
           </Button>
         </label>
         <Button
-          variant="contained"
+          variant="outlined" // Changed to outlined for consistency in this group
           startIcon={<FileUpload />}
           onClick={onExport}
           fullWidth
-          sx={{ mt: 1 }}
         >
-          Export to PNML
+          Export PNML
         </Button>
-        <Box sx={{ mt: 2 }}>
-          {!isRunning ? (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<PlayArrow />}
-              onClick={onRun}
-              fullWidth
-            >
-              Run Simulation
-            </Button>
-          ) : (
-            <Button
-              variant="contained"
-              color="secondary"
-              startIcon={<Stop />}
-              onClick={onStop}
-              fullWidth
-            >
-              Stop Simulation
-            </Button>
-          )}
-        </Box>
       </Box>
+      <Divider />
+
+      {/* Simulation Controls */}
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>  {/* Added gap */}
+      <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'text.secondary' }}>Simulation</Typography>
+        {!isRunning ? (
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<PlayArrow />}
+            onClick={onRun}
+            fullWidth
+          >
+            Run Simulation
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<Stop />}
+            onClick={onStop}
+            fullWidth
+          >
+            Stop Simulation
+          </Button>
+        )}
+      </Box>
+      <Divider />
+       {/* Footer or additional info can go here */}
+       <Box sx={{ p: 2, mt: 'auto', textAlign: 'center' }}>
+          <Typography variant="caption" color="text.secondary">
+            v1.0.0
+          </Typography>
+       </Box>
     </Drawer>
   );
 };

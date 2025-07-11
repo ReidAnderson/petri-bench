@@ -8,7 +8,7 @@ test.describe('Petri Net Application', () => {
 
   test('should load application with initial nodes and edges', async ({ page }) => {
     // Check that the application loads with the title
-    await expect(page.locator('text=Petri Net Bench')).toBeVisible();
+    await expect(page.locator('text=Petri Net Sim')).toBeVisible(); // Updated title
     
     // Check that initial nodes are present
     await expect(page.locator('[data-id="1"]')).toBeVisible(); // Place P1
@@ -108,7 +108,7 @@ test.describe('Petri Net Application', () => {
     const downloadPromise = page.waitForEvent('download');
     
     // Click export button
-    await page.locator('button:has-text("Export to PNML")').click();
+    await page.locator('button:has-text("Export PNML")').click();
     
     // Wait for download and verify
     const download = await downloadPromise;
