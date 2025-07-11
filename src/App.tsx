@@ -62,6 +62,115 @@ const initialFlowEdges: Edge[] = [
 let idCounter = 4; // Renamed for clarity
 const getId = () => `${idCounter++}`;
 
+// Auto-layout functionality
+const autoLayoutNodes = (nodes: FlowNode[], edges: Edge[]): FlowNode[] => {
+  if (nodes.length === 0) return nodes;
+
+  // Constants for layout
+  const LEVEL_HEIGHT = 150;
+  const NODE_WIDTH = 120;
+  const MIN_NODE_SPACING = 50;
+
+  // Build adjacency lists
+  const outgoing = new Map<string, string[]>();
+  const incoming = new Map<string, string[]>();
+  
+  nodes.forEach(node => {
+    outgoing.set(node.id, []);
+    incoming.set(node.id, []);
+  });
+
+  edges.forEach(edge => {
+    outgoing.get(edge.source)?.push(edge.target);
+    incoming.get(edge.target)?.push(edge.source);
+  });
+
+  // Find root nodes (nodes with no incoming edges)
+  const rootNodes = nodes.filter(node => incoming.get(node.id)?.length === 0);
+  
+  // If no root nodes, find nodes with minimal incoming edges
+  if (rootNodes.length === 0) {
+    const minIncoming = Math.min(...nodes.map(node => incoming.get(node.id)?.length || 0));
+    rootNodes.push(...nodes.filter(node => (incoming.get(node.id)?.length || 0) === minIncoming));
+  }
+
+  // Assign levels using BFS
+  const levels = new Map<string, number>();
+  const visited = new Set<string>();
+  const queue: Array<{ nodeId: string, level: number }> = [];
+
+  // Start with root nodes at level 0
+  rootNodes.forEach(node => {
+    queue.push({ nodeId: node.id, level: 0 });
+    levels.set(node.id, 0);
+  });
+
+  while (queue.length > 0) {
+    const { nodeId, level } = queue.shift()!;
+    
+    if (visited.has(nodeId)) continue;
+    visited.add(nodeId);
+
+    const children = outgoing.get(nodeId) || [];
+    children.forEach(childId => {
+      if (!visited.has(childId)) {
+        const currentLevel = levels.get(childId);
+        const newLevel = level + 1;
+        
+        // Assign the maximum level to handle multiple paths to same node
+        if (currentLevel === undefined || newLevel > currentLevel) {
+          levels.set(childId, newLevel);
+          queue.push({ nodeId: childId, level: newLevel });
+        }
+      }
+    });
+  }
+
+  // Handle disconnected components
+  nodes.forEach(node => {
+    if (!levels.has(node.id)) {
+      levels.set(node.id, 0);
+    }
+  });
+
+  // Group nodes by level
+  const nodesByLevel = new Map<number, FlowNode[]>();
+  nodes.forEach(node => {
+    const level = levels.get(node.id) || 0;
+    if (!nodesByLevel.has(level)) {
+      nodesByLevel.set(level, []);
+    }
+    nodesByLevel.get(level)!.push(node);
+  });
+
+  // Calculate positions
+  const layoutedNodes: FlowNode[] = [];
+  const maxLevel = Math.max(...Array.from(levels.values()));
+
+  for (let level = 0; level <= maxLevel; level++) {
+    const nodesInLevel = nodesByLevel.get(level) || [];
+    if (nodesInLevel.length === 0) continue;
+
+    // Calculate total width needed for this level
+    const totalWidth = nodesInLevel.length * NODE_WIDTH + (nodesInLevel.length - 1) * MIN_NODE_SPACING;
+    
+    // Center the level horizontally
+    let currentX = -totalWidth / 2;
+    const y = level * LEVEL_HEIGHT;
+
+    nodesInLevel.forEach((node, index) => {
+      const x = currentX + index * (NODE_WIDTH + MIN_NODE_SPACING);
+      
+      layoutedNodes.push({
+        ...node,
+        position: { x, y }
+      });
+    });
+  }
+
+  return layoutedNodes;
+};
+
 function PetriNetEditor() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   // Holds the PetriNet logic instance
@@ -335,10 +444,29 @@ function PetriNetEditor() {
     });
   }, [setEdges]);
 
+  const handleAutoFormat = useCallback(() => {
+    const layoutedNodes = autoLayoutNodes(nodes, edges);
+    setNodes(layoutedNodes);
+    
+    // Fit view after layout with a small delay to ensure nodes are updated
+    setTimeout(() => {
+      if (reactFlowInstance) {
+        reactFlowInstance.fitView({ padding: 50, duration: 800 });
+      }
+    }, 100);
+  }, [nodes, edges, reactFlowInstance]);
+
 
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar onExport={handleExport} onImport={handleImport} onRun={handleRun} onStop={handleStop} isRunning={isRunning} />
+      <Sidebar 
+        onExport={handleExport} 
+        onImport={handleImport} 
+        onRun={handleRun} 
+        onStop={handleStop} 
+        onAutoFormat={handleAutoFormat}
+        isRunning={isRunning} 
+      />
       <Box component="main" sx={{ flexGrow: 1, height: '100%' }}> {/* Changed width/height */}
         <div ref={reactFlowWrapper} style={{ width: '1000px', height: '1000px' }}> {/* Changed width/height */}
           <ReactFlow

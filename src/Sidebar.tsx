@@ -19,6 +19,7 @@ import {
   FileDownload,
   PlayArrow,
   Stop,
+  AutoFixHigh, // Added for auto-format
 } from '@mui/icons-material';
 
 const drawerWidth = 260; // Slightly wider for comfort
@@ -33,12 +34,14 @@ const Sidebar = ({
   onImport,
   onRun,
   onStop,
+  onAutoFormat, // Added
   isRunning,
 }: {
   onExport: () => void;
   onImport: (file: File) => void;
   onRun: () => void;
   onStop: () => void;
+  onAutoFormat: () => void; // Added
   isRunning: boolean;
 }) => {
   const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,6 +105,20 @@ const Sidebar = ({
           </ListItemButton>
         </Tooltip>
       </List>
+      <Divider />
+
+      {/* Layout Operations */}
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'text.secondary' }}>Layout</Typography>
+        <Button
+          variant="outlined"
+          startIcon={<AutoFixHigh />}
+          onClick={onAutoFormat}
+          fullWidth
+        >
+          Auto Format
+        </Button>
+      </Box>
       <Divider />
 
       {/* File Operations */}
