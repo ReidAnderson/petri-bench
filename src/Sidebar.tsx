@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Drawer,
   List,
-  ListItem,
   ListItemButton, // Changed for better interaction
   ListItemIcon,
   ListItemText,
@@ -20,7 +19,6 @@ import {
   FileDownload,
   PlayArrow,
   Stop,
-  SettingsInputComponent, // Example for a new icon if needed
 } from '@mui/icons-material';
 
 const drawerWidth = 260; // Slightly wider for comfort

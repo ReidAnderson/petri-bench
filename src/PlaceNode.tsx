@@ -1,6 +1,5 @@
-import React from 'react';
 import { Handle, Position } from 'reactflow';
-import { Card, CardContent, Typography, Button, Chip, Box } from '@mui/material';
+import { Card, CardContent, Typography, Button, Chip } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 
 const PlaceNode = ({ data }: { data: { label: string; tokens: number; setTokens: (tokens: number) => void } }) => {

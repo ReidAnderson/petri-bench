@@ -1,14 +1,11 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
-  useNodesState,
-  useEdgesState,
   addEdge,
   Controls,
   MiniMap,
   Background,
   MarkerType,
-  updateEdge,
   applyNodeChanges,
   applyEdgeChanges,
   type NodeChange,
@@ -16,7 +13,8 @@ import ReactFlow, {
   type Connection,
   type Edge,
   type ReactFlowInstance,
-  type Node as FlowNode, // Renamed to avoid conflict with PetriNode
+  type Node as FlowNode,
+  reconnectEdge, // Renamed to avoid conflict with PetriNode
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box } from '@mui/material';
@@ -25,7 +23,7 @@ import Sidebar from './Sidebar';
 import { toPNML, fromPNML } from './pnml';
 import PlaceNode from './PlaceNode';
 import TransitionNode from './TransitionNode';
-import { PetriNet, type PetriNode, type Place, type Transition as PetriTransition } from './petri-net'; // Added
+import { PetriNet, type PetriNode } from './petri-net'; // Added
 import './App.css';
 
 const nodeTypes = {
@@ -80,40 +78,6 @@ function PetriNetEditor() {
   useEffect(() => {
     petriNetRef.current = new PetriNet(nodes, edges);
   }, [nodes, edges]);
-
-
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((currentNodes) => {
-        const nextNodes = applyNodeChanges(changes, currentNodes);
-        // Sync changes with PetriNet instance
-        changes.forEach(change => {
-          if (change.type === 'remove') {
-            petriNetRef.current.removeNode(change.id);
-          }
-          // Position/dimension changes are handled by ReactFlow, data changes by specific handlers
-        });
-        return nextNodes;
-      });
-    },
-    [setNodes]
-  );
-
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      setEdges((currentEdges) => {
-        const nextEdges = applyEdgeChanges(changes, currentEdges);
-        // Sync changes with PetriNet instance
-        changes.forEach(change => {
-          if (change.type === 'remove') {
-            petriNetRef.current.removeEdge(change.id);
-          }
-        });
-        return nextEdges;
-      });
-    },
-    [setEdges]
-  );
 
   const isValidConnection = useCallback(
     (connection: Connection) => {
@@ -383,10 +347,10 @@ function PetriNetEditor() {
             onNodesChange={customOnNodesChange} // Use custom handler
             onEdgesChange={customOnEdgesChange} // Use custom handler
             onEdgeUpdate={(oldEdge, newConnection) => { // Handle edge updates
-                const updatedEdge = updateEdge(oldEdge, newConnection, edges);
+                const updatedEdge = reconnectEdge(oldEdge, newConnection, edges);
                 petriNetRef.current.removeEdge(oldEdge.id);
-                petriNetRef.current.addEdge(updatedEdge);
-                setEdges((es) => es.map(e => e.id === oldEdge.id ? updatedEdge : e));
+                petriNetRef.current.addEdge(updatedEdge[0]);
+                setEdges((es) => es.map(e => e.id === oldEdge.id ? updatedEdge[0] : e));
             }}
             onConnect={onConnect}
             onInit={setReactFlowInstance}
