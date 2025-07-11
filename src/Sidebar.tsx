@@ -11,14 +11,13 @@ import {
   Box,
   ListSubheader, // Added for grouping
   Tooltip, // Added for hints
+  TextField, // Added for iteration input
 } from '@mui/material';
 import {
   Grain,
   AllOut,
   FileUpload,
   FileDownload,
-  PlayArrow,
-  Stop,
   AutoFixHigh, // Added for auto-format
   SkipNext, // Added for step forward
   FastForward, // Added for fast forward
@@ -36,27 +35,27 @@ const onDragStart = (event: React.DragEvent<HTMLElement>, nodeType: string) => {
 const Sidebar = ({
   onExport,
   onImport,
-  onRun,
-  onStop,
   onAutoFormat, // Added
   onStartSimulation,
   onStepForward,
   onFastForward,
   onEndSimulation,
-  isRunning,
+  onRunMultipleIterations,
   isInSimulationMode,
+  iterationCount,
+  setIterationCount,
 }: {
   onExport: () => void;
   onImport: (file: File) => void;
-  onRun: () => void;
-  onStop: () => void;
   onAutoFormat: () => void; // Added
   onStartSimulation: () => void;
   onStepForward: () => void;
   onFastForward: () => void;
   onEndSimulation: () => void;
-  isRunning: boolean;
+  onRunMultipleIterations: () => void;
   isInSimulationMode: boolean;
+  iterationCount: number;
+  setIterationCount: (count: number) => void;
 }) => {
   const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -174,6 +173,17 @@ const Sidebar = ({
         
         {!isInSimulationMode ? (
           <>
+            {/* Multiple Iterations Input */}
+            <TextField
+              label="Iterations"
+              type="number"
+              size="small"
+              value={iterationCount}
+              onChange={(e) => setIterationCount(Math.max(1, parseInt(e.target.value) || 1))}
+              inputProps={{ min: 1, max: 1000 }}
+              fullWidth
+            />
+            
             {/* Start enhanced simulation */}
             <Button
               variant="outlined"
@@ -182,6 +192,17 @@ const Sidebar = ({
               fullWidth
             >
               Start Simulation
+            </Button>
+            
+            {/* Run Multiple Iterations */}
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<FastForward />}
+              onClick={onRunMultipleIterations}
+              fullWidth
+            >
+              Run {iterationCount} Iteration{iterationCount !== 1 ? 's' : ''}
             </Button>
           </>
         ) : (

@@ -86,21 +86,50 @@ test.describe('Petri Net Application', () => {
     await expect(place2.locator('text=Tokens: 1')).toBeVisible();
   });
 
-  test('should run and stop simulation', async ({ page }) => {
-    // Check that Run button is visible
-    await expect(page.locator('button:has-text("Run Simulation")')).toBeVisible();
+  test('should start and end enhanced simulation', async ({ page }) => {
+    // Check that Start Simulation button is visible
+    await expect(page.locator('button:has-text("Start Simulation")')).toBeVisible();
     
-    // Start simulation
-    await page.locator('button:has-text("Run Simulation")').click();
+    // Start enhanced simulation
+    await page.locator('button:has-text("Start Simulation")').click();
     
-    // Check that Stop button appears
-    await expect(page.locator('button:has-text("Stop Simulation")')).toBeVisible();
+    // Check that we're now in simulation mode - End Simulation button should appear
+    await expect(page.locator('button:has-text("End Simulation")')).toBeVisible();
     
-    // Stop simulation
-    await page.locator('button:has-text("Stop Simulation")').click();
+    // Check that simulation control buttons are visible
+    await expect(page.locator('button:has-text("Step Forward")')).toBeVisible();
+    await expect(page.locator('button:has-text("Fast Forward")')).toBeVisible();
     
-    // Check that Run button reappears
-    await expect(page.locator('button:has-text("Run Simulation")')).toBeVisible();
+    // End simulation
+    await page.locator('button:has-text("End Simulation")').click();
+    
+    // Check that Start Simulation button reappears
+    await expect(page.locator('button:has-text("Start Simulation")')).toBeVisible();
+  });
+
+  test('should run multiple iterations', async ({ page }) => {
+    // Check that iteration input is visible and set value
+    const iterationInput = page.locator('input[type="number"]').first();
+    await expect(iterationInput).toBeVisible();
+    
+    // Set iteration count to 3
+    await iterationInput.fill('3');
+    
+    // Check that the Run button shows correct text
+    await expect(page.locator('button:has-text("Run 3 Iterations")')).toBeVisible();
+    
+    // Click the Run Multiple Iterations button
+    await page.locator('button:has-text("Run 3 Iterations")').click();
+    
+    // Wait for the simulation to complete and check for alert
+    // Note: This will show an alert with clipboard copy confirmation
+    page.on('dialog', async dialog => {
+      expect(dialog.message()).toContain('Multiple iterations complete');
+      await dialog.accept();
+    });
+    
+    // Wait a bit for the simulation to complete
+    await page.waitForTimeout(2000);
   });
 
   test('should export PNML file', async ({ page }) => {
@@ -113,5 +142,30 @@ test.describe('Petri Net Application', () => {
     // Wait for download and verify
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('petrinet.pnml');
+  });
+
+  test('should step through simulation manually', async ({ page }) => {
+    // Start enhanced simulation
+    await page.locator('button:has-text("Start Simulation")').click();
+    
+    // Check initial state before stepping
+    const place1 = page.locator('[data-id="1"]');
+    const place2 = page.locator('[data-id="3"]');
+    
+    await expect(place1.locator('text=Tokens: 1')).toBeVisible();
+    await expect(place2.locator('text=Tokens: 0')).toBeVisible();
+    
+    // Click Step Forward button
+    await page.locator('button:has-text("Step Forward")').click();
+    
+    // Wait for the step to complete
+    await page.waitForTimeout(500);
+    
+    // Check that tokens moved (since there's only one fireable transition)
+    await expect(place1.locator('text=Tokens: 0')).toBeVisible();
+    await expect(place2.locator('text=Tokens: 1')).toBeVisible();
+    
+    // End simulation
+    await page.locator('button:has-text("End Simulation")').click();
   });
 });

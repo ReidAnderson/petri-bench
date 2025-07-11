@@ -180,13 +180,20 @@ function PetriNetEditor() {
   const [edges, setEdges] = useState<Edge[]>(initialFlowEdges);
 
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
+  // Note: isRunning and simulationInterval removed as we focus on enhanced simulation mode
+  // const [isRunning, setIsRunning] = useState(false);
   const simulationInterval = useRef<number | null>(null);
 
   // Enhanced simulation state
   const [isInSimulationMode, setIsInSimulationMode] = useState(false);
   const [savedTokenState, setSavedTokenState] = useState<Map<string, number>>(new Map());
   const [transitionHistory, setTransitionHistory] = useState<Array<{ transitionId: string, timestamp: number, label: string }>>([]); 
+  const [iterationCount, setIterationCount] = useState(1);
+  const [multipleIterationsResults, setMultipleIterationsResults] = useState<Array<{
+    iteration: number;
+    transitionsFired: number;
+    history: Array<{ step: number; transition: string; transitionId: string; timestamp: string }>;
+  }>>([]);
 
   // Synchronize PetriNet instance when nodes/edges are externally changed (e.g. import)
   useEffect(() => {
@@ -311,36 +318,38 @@ function PetriNetEditor() {
     [setNodes, isInSimulationMode, nodes]
   );
 
-  const runSimulationStep = useCallback(() => {
-    const fireableTransitions = petriNetRef.current.getFireableTransitions();
-    if (fireableTransitions.length > 0) {
-      const randomIndex = Math.floor(Math.random() * fireableTransitions.length);
-      const transitionToFire = fireableTransitions[randomIndex];
-      handleFire(transitionToFire.id);
-    } else {
-      if (simulationInterval.current) {
-        clearInterval(simulationInterval.current);
-      }
-      setIsRunning(false);
-      console.log("Simulation stopped: No fireable transitions.");
-    }
-  }, [handleFire]); // Removed direct dependencies on nodes/edges, relies on petriNetRef
+  // Note: runSimulationStep removed as we focus on enhanced simulation mode
+  // const runSimulationStep = useCallback(() => {
+  //   const fireableTransitions = petriNetRef.current.getFireableTransitions();
+  //   if (fireableTransitions.length > 0) {
+  //     const randomIndex = Math.floor(Math.random() * fireableTransitions.length);
+  //     const transitionToFire = fireableTransitions[randomIndex];
+  //     handleFire(transitionToFire.id);
+  //   } else {
+  //     if (simulationInterval.current) {
+  //       clearInterval(simulationInterval.current);
+  //     }
+  //     console.log("Simulation stopped: No fireable transitions.");
+  //   }
+  // }, [handleFire]);
 
-  const handleRun = useCallback(() => {
-    if (isRunning) return;
-    setIsRunning(true);
-    // Initial step, then interval
-    runSimulationStep();
-    simulationInterval.current = window.setInterval(runSimulationStep, 1000);
-  }, [runSimulationStep, isRunning]);
+  // Note: handleRun and handleStop removed as we now focus on enhanced simulation mode
+  
+  // const handleRun = useCallback(() => {
+  //   if (isRunning) return;
+  //   setIsRunning(true);
+  //   // Initial step, then interval
+  //   runSimulationStep();
+  //   simulationInterval.current = window.setInterval(runSimulationStep, 1000);
+  // }, [runSimulationStep, isRunning]);
 
-  const handleStop = useCallback(() => {
-    setIsRunning(false);
-    if (simulationInterval.current) {
-      clearInterval(simulationInterval.current);
-      simulationInterval.current = null;
-    }
-  }, []);
+  // const handleStop = useCallback(() => {
+  //   setIsRunning(false);
+  //   if (simulationInterval.current) {
+  //     clearInterval(simulationInterval.current);
+  //     simulationInterval.current = null;
+  //   }
+  // }, []);
 
   useEffect(() => {
     return () => {
@@ -534,6 +543,7 @@ function PetriNetEditor() {
     const report = {
       startTime: transitionHistory.length > 0 ? transitionHistory[0].timestamp : Date.now(),
       endTime: Date.now(),
+      simulationType: 'single',
       transitionsFired: transitionHistory.length,
       savedTokenState: Array.from(savedTokenState.entries()).map(([placeId, tokens]) => ({ placeId, tokens })),
       history: transitionHistory.map((entry, index) => ({
@@ -564,20 +574,162 @@ function PetriNetEditor() {
     console.log(`Simulation ended. Report exported with ${report.transitionsFired} transitions fired.`);
   }, [isInSimulationMode, transitionHistory, savedTokenState]);
 
+  // Helper function to reset the Petri net to saved state
+  const resetToSavedState = useCallback(() => {
+    if (savedTokenState.size === 0) return;
+    
+    setNodes(currentNodes =>
+      currentNodes.map(node => {
+        if (node.type === 'place') {
+          const savedTokens = savedTokenState.get(node.id);
+          if (savedTokens !== undefined) {
+            // Update both React state and PetriNet instance
+            petriNetRef.current.setTokens(node.id, savedTokens);
+            return { ...node, data: { ...node.data, tokens: savedTokens } };
+          }
+        }
+        return node;
+      })
+    );
+  }, [savedTokenState]);
+
+  // Function to run a single iteration and return results
+  const runSingleIteration = useCallback(async (iterationNumber: number): Promise<{
+    iteration: number;
+    transitionsFired: number;
+    history: Array<{ step: number; transition: string; transitionId: string; timestamp: string }>;
+  }> => {
+    return new Promise((resolve) => {
+      const iterationHistory: Array<{ transitionId: string, timestamp: number, label: string }> = [];
+      
+      const runStep = () => {
+        const fireableTransitions = petriNetRef.current.getFireableTransitions();
+        if (fireableTransitions.length > 0) {
+          const randomIndex = Math.floor(Math.random() * fireableTransitions.length);
+          const transitionToFire = fireableTransitions[randomIndex];
+          
+          // Record transition firing
+          const historyEntry = {
+            transitionId: transitionToFire.id,
+            timestamp: Date.now(),
+            label: transitionToFire.data.label
+          };
+          iterationHistory.push(historyEntry);
+          
+          // Fire the transition
+          const result = petriNetRef.current.fireTransition(transitionToFire.id);
+          if (result && result.updatedNodesData) {
+            setNodes((currentNodes) =>
+              currentNodes.map((node) => {
+                const update = result.updatedNodesData.find(u => u.id === node.id);
+                if (update && node.type === 'place') {
+                  return { ...node, data: { ...node.data, tokens: update.tokens } };
+                }
+                return node;
+              })
+            );
+          }
+          
+          // Continue with next step after a small delay
+          setTimeout(runStep, 10);
+        } else {
+          // No more fireable transitions, resolve with results
+          resolve({
+            iteration: iterationNumber,
+            transitionsFired: iterationHistory.length,
+            history: iterationHistory.map((entry, index) => ({
+              step: index + 1,
+              transition: entry.label,
+              transitionId: entry.transitionId,
+              timestamp: new Date(entry.timestamp).toISOString()
+            }))
+          });
+        }
+      };
+      
+      runStep();
+    });
+  }, []);
+
+  // Function to handle multiple iterations
+  const handleRunMultipleIterations = useCallback(async () => {
+    if (savedTokenState.size !== 0) {
+      // Save current state if not already saved
+      const tokenState = new Map<string, number>();
+      nodes.forEach(node => {
+        if (node.type === 'place' && typeof node.data.tokens === 'number') {
+          tokenState.set(node.id, node.data.tokens);
+        }
+      });
+      setSavedTokenState(tokenState);
+    }
+    
+    const results: Array<{
+      iteration: number;
+      transitionsFired: number;
+      history: Array<{ step: number; transition: string; transitionId: string; timestamp: string }>;
+    }> = [];
+    
+    for (let i = 1; i <= iterationCount; i++) {
+      // Reset to saved state before each iteration
+      resetToSavedState();
+      
+      // Wait a bit for state to update
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Run the iteration
+      const iterationResult = await runSingleIteration(i);
+      results.push(iterationResult);
+      
+      console.log(`Completed iteration ${i}/${iterationCount}: ${iterationResult.transitionsFired} transitions fired`);
+    }
+    
+    setMultipleIterationsResults(results);
+    console.log('Multiple iterations results stored:', results.length, 'iterations completed');
+    console.log('Results summary:', multipleIterationsResults.length, 'previous runs stored');
+    
+    // Create comprehensive report
+    const report = {
+      startTime: new Date().toISOString(),
+      endTime: new Date().toISOString(),
+      totalIterations: iterationCount,
+      savedTokenState: Array.from(savedTokenState.entries()).map(([placeId, tokens]) => ({ placeId, tokens })),
+      iterations: results,
+      summary: {
+        totalTransitionsFired: results.reduce((sum, iteration) => sum + iteration.transitionsFired, 0),
+        averageTransitionsPerIteration: results.length > 0 ? results.reduce((sum, iteration) => sum + iteration.transitionsFired, 0) / results.length : 0,
+        minTransitions: results.length > 0 ? Math.min(...results.map(r => r.transitionsFired)) : 0,
+        maxTransitions: results.length > 0 ? Math.max(...results.map(r => r.transitionsFired)) : 0
+      }
+    };
+    
+    // Copy to clipboard
+    const reportJson = JSON.stringify(report, null, 2);
+    navigator.clipboard.writeText(reportJson).then(() => {
+      console.log('Multiple iterations report copied to clipboard');
+      alert(`Multiple iterations complete! Results from ${iterationCount} iteration${iterationCount !== 1 ? 's' : ''} copied to clipboard.`);
+    }).catch(err => {
+      console.error('Failed to copy to clipboard:', err);
+      alert('Multiple iterations complete, but failed to copy to clipboard.');
+    });
+    
+    console.log(`Multiple iterations complete: ${iterationCount} iterations, ${report.summary.totalTransitionsFired} total transitions fired`);
+  }, [iterationCount, nodes, savedTokenState, resetToSavedState, runSingleIteration, multipleIterationsResults]);
+
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <Sidebar 
         onExport={handleExport} 
         onImport={handleImport} 
-        onRun={handleRun} 
-        onStop={handleStop} 
         onAutoFormat={handleAutoFormat}
         onStartSimulation={handleStartSimulation}
         onStepForward={handleStepForward}
         onFastForward={handleFastForward}
         onEndSimulation={handleEndSimulation}
-        isRunning={isRunning}
+        onRunMultipleIterations={handleRunMultipleIterations}
         isInSimulationMode={isInSimulationMode}
+        iterationCount={iterationCount}
+        setIterationCount={setIterationCount}
       />
       <Box component="main" sx={{ flexGrow: 1, height: '100%' }}> {/* Changed width/height */}
         <div ref={reactFlowWrapper} style={{ width: '1000px', height: '1000px' }}> {/* Changed width/height */}
