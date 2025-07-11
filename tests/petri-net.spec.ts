@@ -108,7 +108,7 @@ test.describe('Petri Net Application', () => {
     const downloadPromise = page.waitForEvent('download');
     
     // Click export button
-    await page.locator('button:has-text("Export to PNML")').click();
+    await page.locator('button:has-text("Export PNML")').click();
     
     // Wait for download and verify
     const download = await downloadPromise;

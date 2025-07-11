@@ -376,7 +376,7 @@ function PetriNetEditor() {
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <Sidebar onExport={handleExport} onImport={handleImport} onRun={handleRun} onStop={handleStop} isRunning={isRunning} />
       <Box component="main" sx={{ flexGrow: 1, height: '100%' }}> {/* Changed width/height */}
-        <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%' }}> {/* Changed width/height */}
+        <div ref={reactFlowWrapper} style={{ width: '1000px', height: '1000px' }}> {/* Changed width/height */}
           <ReactFlow
             nodes={nodesWithReactFlowData}
             edges={edges}

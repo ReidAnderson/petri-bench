@@ -1,4 +1,4 @@
-import { PetriNet, type Place, type Transition, type PetriEdge, type PetriNode } from '../src/petri-net';
+import { PetriNet, type Place, type Transition, type PetriEdge, type PetriNode } from '../../src/petri-net';
 import type { Node as FlowNode, Edge as FlowEdge } from 'reactflow';
 
 // Helper to create FlowNode for PetriNet constructor

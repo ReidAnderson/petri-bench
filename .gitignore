@@ -1,6 +1,7 @@
 # Ignore all test results
 test-results/
 playwright-report/
+coverage/
 
 # Logs
 logs
@@ -26,3 +27,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.gitignore
+jest.config.js
+src/App.tsx
+tests/petri-net.spec.ts
+tests/pnml.spec.ts
+tests/unit/PetriNet.class.spec.ts
