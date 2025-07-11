@@ -183,6 +183,11 @@ function PetriNetEditor() {
   const [isRunning, setIsRunning] = useState(false);
   const simulationInterval = useRef<number | null>(null);
 
+  // Enhanced simulation state
+  const [isInSimulationMode, setIsInSimulationMode] = useState(false);
+  const [savedTokenState, setSavedTokenState] = useState<Map<string, number>>(new Map());
+  const [transitionHistory, setTransitionHistory] = useState<Array<{ transitionId: string, timestamp: number, label: string }>>([]); 
+
   // Synchronize PetriNet instance when nodes/edges are externally changed (e.g. import)
   useEffect(() => {
     petriNetRef.current = new PetriNet(nodes, edges);
@@ -286,11 +291,24 @@ function PetriNetEditor() {
             return node;
           })
         );
+        
+        // Record transition firing if in simulation mode
+        if (isInSimulationMode) {
+          const transition = nodes.find(n => n.id === transitionId && n.type === 'transition');
+          if (transition) {
+            const historyEntry = {
+              transitionId,
+              timestamp: Date.now(),
+              label: transition.data.label || transitionId
+            };
+            setTransitionHistory(prev => [...prev, historyEntry]);
+          }
+        }
       } else {
         console.log(`Transition ${transitionId} cannot fire or does not exist.`);
       }
     },
-    [setNodes]
+    [setNodes, isInSimulationMode, nodes]
   );
 
   const runSimulationStep = useCallback(() => {
@@ -456,6 +474,95 @@ function PetriNetEditor() {
     }, 100);
   }, [nodes, edges, reactFlowInstance]);
 
+  // Enhanced simulation functions
+  const handleStartSimulation = useCallback(() => {
+    // Save current token state
+    const tokenState = new Map<string, number>();
+    nodes.forEach(node => {
+      if (node.type === 'place' && typeof node.data.tokens === 'number') {
+        tokenState.set(node.id, node.data.tokens);
+      }
+    });
+    setSavedTokenState(tokenState);
+    setTransitionHistory([]);
+    setIsInSimulationMode(true);
+    console.log("Simulation mode started. Token state saved:", Array.from(tokenState.entries()));
+  }, [nodes]);
+
+  const handleStepForward = useCallback(() => {
+    if (!isInSimulationMode) return;
+    
+    const fireableTransitions = petriNetRef.current.getFireableTransitions();
+    if (fireableTransitions.length > 0) {
+      const randomIndex = Math.floor(Math.random() * fireableTransitions.length);
+      const transitionToFire = fireableTransitions[randomIndex];
+      
+      // Fire the transition (recording handled in handleFire)
+      handleFire(transitionToFire.id);
+      console.log(`Stepped forward: Fired transition ${transitionToFire.data.label}`);
+    } else {
+      console.log("No fireable transitions available.");
+    }
+  }, [isInSimulationMode, handleFire]);
+
+  const handleFastForward = useCallback(() => {
+    if (!isInSimulationMode) return;
+    
+    const runUntilStop = () => {
+      const fireableTransitions = petriNetRef.current.getFireableTransitions();
+      if (fireableTransitions.length > 0) {
+        const randomIndex = Math.floor(Math.random() * fireableTransitions.length);
+        const transitionToFire = fireableTransitions[randomIndex];
+        
+        // Fire the transition (recording handled in handleFire)
+        handleFire(transitionToFire.id);
+        
+        // Continue running after a short delay to allow state updates
+        setTimeout(runUntilStop, 50);
+      } else {
+        console.log("Fast forward complete: No more fireable transitions.");
+      }
+    };
+    
+    runUntilStop();
+  }, [isInSimulationMode, handleFire]);
+
+  const handleEndSimulation = useCallback(() => {
+    if (!isInSimulationMode) return;
+    
+    // Create simulation report including saved state
+    const report = {
+      startTime: transitionHistory.length > 0 ? transitionHistory[0].timestamp : Date.now(),
+      endTime: Date.now(),
+      transitionsFired: transitionHistory.length,
+      savedTokenState: Array.from(savedTokenState.entries()).map(([placeId, tokens]) => ({ placeId, tokens })),
+      history: transitionHistory.map((entry, index) => ({
+        step: index + 1,
+        transition: entry.label,
+        transitionId: entry.transitionId,
+        timestamp: new Date(entry.timestamp).toISOString()
+      }))
+    };
+    
+    // Export the report as JSON
+    const reportJson = JSON.stringify(report, null, 2);
+
+    // Copy to clipboard and inform user
+    navigator.clipboard.writeText(reportJson).then(() => {
+      console.log('Simulation report copied to clipboard');
+      // You could also show a toast notification here if you have a notification system
+      alert('Simulation report has been copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy to clipboard:', err);
+      alert('Failed to copy to clipboard: ' + reportJson);
+    });
+    
+    // Reset simulation state
+    setIsInSimulationMode(false);
+    setTransitionHistory([]);
+    setSavedTokenState(new Map());
+    console.log(`Simulation ended. Report exported with ${report.transitionsFired} transitions fired.`);
+  }, [isInSimulationMode, transitionHistory, savedTokenState]);
 
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
@@ -465,7 +572,12 @@ function PetriNetEditor() {
         onRun={handleRun} 
         onStop={handleStop} 
         onAutoFormat={handleAutoFormat}
-        isRunning={isRunning} 
+        onStartSimulation={handleStartSimulation}
+        onStepForward={handleStepForward}
+        onFastForward={handleFastForward}
+        onEndSimulation={handleEndSimulation}
+        isRunning={isRunning}
+        isInSimulationMode={isInSimulationMode}
       />
       <Box component="main" sx={{ flexGrow: 1, height: '100%' }}> {/* Changed width/height */}
         <div ref={reactFlowWrapper} style={{ width: '1000px', height: '1000px' }}> {/* Changed width/height */}

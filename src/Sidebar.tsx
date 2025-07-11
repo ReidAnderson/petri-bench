@@ -20,6 +20,10 @@ import {
   PlayArrow,
   Stop,
   AutoFixHigh, // Added for auto-format
+  SkipNext, // Added for step forward
+  FastForward, // Added for fast forward
+  PlayCircle, // Added for start simulation
+  StopCircle, // Added for end simulation
 } from '@mui/icons-material';
 
 const drawerWidth = 260; // Slightly wider for comfort
@@ -35,14 +39,24 @@ const Sidebar = ({
   onRun,
   onStop,
   onAutoFormat, // Added
+  onStartSimulation,
+  onStepForward,
+  onFastForward,
+  onEndSimulation,
   isRunning,
+  isInSimulationMode,
 }: {
   onExport: () => void;
   onImport: (file: File) => void;
   onRun: () => void;
   onStop: () => void;
   onAutoFormat: () => void; // Added
+  onStartSimulation: () => void;
+  onStepForward: () => void;
+  onFastForward: () => void;
+  onEndSimulation: () => void;
   isRunning: boolean;
+  isInSimulationMode: boolean;
 }) => {
   const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -153,28 +167,52 @@ const Sidebar = ({
       <Divider />
 
       {/* Simulation Controls */}
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>  {/* Added gap */}
-      <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'text.secondary' }}>Simulation</Typography>
-        {!isRunning ? (
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<PlayArrow />}
-            onClick={onRun}
-            fullWidth
-          >
-            Run Simulation
-          </Button>
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'text.secondary' }}>
+          {isInSimulationMode ? 'Simulation Mode' : 'Simulation'}
+        </Typography>
+        
+        {!isInSimulationMode ? (
+          <>
+            {/* Start enhanced simulation */}
+            <Button
+              variant="outlined"
+              startIcon={<PlayCircle />}
+              onClick={onStartSimulation}
+              fullWidth
+            >
+              Start Simulation
+            </Button>
+          </>
         ) : (
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<Stop />}
-            onClick={onStop}
-            fullWidth
-          >
-            Stop Simulation
-          </Button>
+          <>
+            {/* Enhanced simulation controls */}
+            <Button
+              variant="outlined"
+              startIcon={<SkipNext />}
+              onClick={onStepForward}
+              fullWidth
+            >
+              Step Forward
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<FastForward />}
+              onClick={onFastForward}
+              fullWidth
+            >
+              Fast Forward
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<StopCircle />}
+              onClick={onEndSimulation}
+              fullWidth
+            >
+              End Simulation
+            </Button>
+          </>
         )}
       </Box>
       <Divider />
