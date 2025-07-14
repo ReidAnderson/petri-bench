@@ -1,22 +1,17 @@
 import { Handle, Position } from 'reactflow';
-import { Card, CardContent, Typography, Box } from '@mui/material';
+import { Card, CardContent, Typography, Button, Chip } from '@mui/material';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 
 const PlaceNode = ({ data }: { data: { label: string; tokens: number; setTokens: (tokens: number) => void } }) => {
   return (
     <Card
       sx={{
-        width: 100,
-        height: 100,
+        minWidth: 120,
         borderRadius: '50%',
-        border: '3px solid #1976d2',
+        border: '2px solid #1976d2',
         backgroundColor: 'rgba(25, 118, 210, 0.1)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
         textAlign: 'center',
-        cursor: 'pointer',
       }}
-      onClick={() => data.setTokens(data.tokens + 1)}
     >
       <Handle
         type="target"
@@ -28,9 +23,15 @@ const PlaceNode = ({ data }: { data: { label: string; tokens: number; setTokens:
         <Typography variant="subtitle1" component="div">
           {data.label}
         </Typography>
-        <Typography variant="h6" component="div">
-          {data.tokens}
-        </Typography>
+        <Chip label={`Tokens: ${data.tokens}`} sx={{ mt: 1, mb: 1 }} />
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<AddCircleOutlineIcon />}
+          onClick={() => data.setTokens(data.tokens + 1)}
+        >
+          Add
+        </Button>
       </CardContent>
       <Handle
         type="source"

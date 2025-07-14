@@ -63,14 +63,13 @@ let idCounter = 4; // Renamed for clarity
 const getId = () => `${idCounter++}`;
 
 // Auto-layout functionality
-const autoLayoutNodes = (nodes: FlowNode[], edges: Edge[], direction = 'TB'): FlowNode[] => {
+const autoLayoutNodes = (nodes: FlowNode[], edges: Edge[]): FlowNode[] => {
   if (nodes.length === 0) return nodes;
 
   // Constants for layout
-  const LEVEL_HEIGHT = 200;
+  const LEVEL_HEIGHT = 150;
   const NODE_WIDTH = 120;
-  const MIN_NODE_SPACING = 100;
-  const isVertical = direction === 'TB';
+  const MIN_NODE_SPACING = 50;
 
   // Build adjacency lists
   const outgoing = new Map<string, string[]>();
@@ -147,45 +146,26 @@ const autoLayoutNodes = (nodes: FlowNode[], edges: Edge[], direction = 'TB'): Fl
   // Calculate positions
   const layoutedNodes: FlowNode[] = [];
   const maxLevel = Math.max(...Array.from(levels.values()));
-  const maxNodesInLevel = Math.max(...Array.from(nodesByLevel.values()).map(nodes => nodes.length));
 
   for (let level = 0; level <= maxLevel; level++) {
     const nodesInLevel = nodesByLevel.get(level) || [];
     if (nodesInLevel.length === 0) continue;
 
-    if (isVertical) {
-      // Calculate total width needed for this level
-      const totalWidth = maxNodesInLevel * NODE_WIDTH + (maxNodesInLevel - 1) * MIN_NODE_SPACING;
+    // Calculate total width needed for this level
+    const totalWidth = nodesInLevel.length * NODE_WIDTH + (nodesInLevel.length - 1) * MIN_NODE_SPACING;
+    
+    // Center the level horizontally
+    let currentX = -totalWidth / 2;
+    const y = level * LEVEL_HEIGHT;
 
-      // Center the level horizontally
-      let currentX = -totalWidth / 2;
-      const y = level * LEVEL_HEIGHT;
-
-      nodesInLevel.forEach((node, index) => {
-        const x = currentX + index * (NODE_WIDTH + MIN_NODE_SPACING);
-
-        layoutedNodes.push({
-          ...node,
-          position: { x, y }
-        });
-      });
-    } else {
-      // Calculate total height needed for this level
-      const totalHeight = maxNodesInLevel * NODE_WIDTH + (maxNodesInLevel - 1) * MIN_NODE_SPACING;
+    nodesInLevel.forEach((node, index) => {
+      const x = currentX + index * (NODE_WIDTH + MIN_NODE_SPACING);
       
-      // Center the level vertically
-      let currentY = -totalHeight / 2;
-      const x = level * LEVEL_HEIGHT;
-
-      nodesInLevel.forEach((node, index) => {
-        const y = currentY + index * (NODE_WIDTH + MIN_NODE_SPACING);
-
-        layoutedNodes.push({
-          ...node,
-          position: { x, y }
-        });
+      layoutedNodes.push({
+        ...node,
+        position: { x, y }
       });
-    }
+    });
   }
 
   return layoutedNodes;
@@ -198,7 +178,6 @@ function PetriNetEditor() {
 
   const [nodes, setNodes] = useState<FlowNode[]>(initialFlowNodes);
   const [edges, setEdges] = useState<Edge[]>(initialFlowEdges);
-  const [layoutDirection, setLayoutDirection] = useState('TB');
 
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   // Note: isRunning and simulationInterval removed as we focus on enhanced simulation mode
@@ -246,7 +225,7 @@ function PetriNetEditor() {
 
   const onConnect = useCallback(
     (params: Edge | Connection) => {
-      const newEdge = { ...params, id: getId(), markerEnd: { type: MarkerType.Arrow, width: 20, height: 20 } } as Edge;
+      const newEdge = { ...params, id: getId(), markerEnd: { type: MarkerType.ArrowClosed } } as Edge;
       try {
         petriNetRef.current.addEdge(newEdge);
         setEdges((eds) => addEdge(newEdge, eds));
@@ -493,7 +472,7 @@ function PetriNetEditor() {
   }, [setEdges]);
 
   const handleAutoFormat = useCallback(() => {
-    const layoutedNodes = autoLayoutNodes(nodes, edges, layoutDirection);
+    const layoutedNodes = autoLayoutNodes(nodes, edges);
     setNodes(layoutedNodes);
     
     // Fit view after layout with a small delay to ensure nodes are updated
@@ -502,7 +481,7 @@ function PetriNetEditor() {
         reactFlowInstance.fitView({ padding: 50, duration: 800 });
       }
     }, 100);
-  }, [nodes, edges, reactFlowInstance, layoutDirection]);
+  }, [nodes, edges, reactFlowInstance]);
 
   // Enhanced simulation functions
   const handleStartSimulation = useCallback(() => {
@@ -751,8 +730,6 @@ function PetriNetEditor() {
         isInSimulationMode={isInSimulationMode}
         iterationCount={iterationCount}
         setIterationCount={setIterationCount}
-        layoutDirection={layoutDirection}
-        setLayoutDirection={setLayoutDirection}
       />
       <Box component="main" sx={{ flexGrow: 1, height: '100%' }}> {/* Changed width/height */}
         <div ref={reactFlowWrapper} style={{ width: '1000px', height: '1000px' }}> {/* Changed width/height */}
