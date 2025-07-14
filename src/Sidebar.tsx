@@ -32,6 +32,13 @@ const onDragStart = (event: React.DragEvent<HTMLElement>, nodeType: string) => {
   event.dataTransfer.effectAllowed = 'move';
 };
 
+import {
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+} from '@mui/material';
+
 const Sidebar = ({
   onExport,
   onImport,
@@ -44,6 +51,8 @@ const Sidebar = ({
   isInSimulationMode,
   iterationCount,
   setIterationCount,
+  layoutDirection,
+  setLayoutDirection,
 }: {
   onExport: () => void;
   onImport: (file: File) => void;
@@ -56,6 +65,8 @@ const Sidebar = ({
   isInSimulationMode: boolean;
   iterationCount: number;
   setIterationCount: (count: number) => void;
+  layoutDirection: string;
+  setLayoutDirection: (direction: string) => void;
 }) => {
   const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -123,6 +134,17 @@ const Sidebar = ({
       {/* Layout Operations */}
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <Typography variant="subtitle2" sx={{ mb: 0.5, color: 'text.secondary' }}>Layout</Typography>
+        <FormControl fullWidth size="small">
+          <InputLabel>Direction</InputLabel>
+          <Select
+            value={layoutDirection}
+            label="Direction"
+            onChange={(e) => setLayoutDirection(e.target.value)}
+          >
+            <MenuItem value="TB">Top to Bottom</MenuItem>
+            <MenuItem value="LR">Left to Right</MenuItem>
+          </Select>
+        </FormControl>
         <Button
           variant="outlined"
           startIcon={<AutoFixHigh />}
