@@ -1,12 +1,16 @@
 import PetriNetVisualization from '@/components/PetriNetVisualization'
 import SimulationControls from '@/components/SimulationControls'
 import SimulationResults from '@/components/SimulationResults'
-import { SimulationResult } from '@/types'
-import { useState } from 'react'
+import { PetriNet, SimulationResult } from '@/types'
+import { createDefaultPetriNet } from '@/utils/petriNetUtils'
+import { useMemo, useState } from 'react'
 
 const SimulatorPage: React.FC = () => {
     const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
     const [isLoading, setIsLoading] = useState(false)
+
+    // Use the default Petri net for now - in the future this could come from props or state
+    const petriNet: PetriNet = useMemo(() => createDefaultPetriNet(), [])
 
     const handleRunSimulation = async (steps: number) => {
         setIsLoading(true)
@@ -39,7 +43,7 @@ const SimulatorPage: React.FC = () => {
             />
 
             <section className="main-panel w-full lg:w-2/3 xl:w-3/4 flex flex-col">
-                <PetriNetVisualization mode="simulator" />
+                <PetriNetVisualization mode="simulator" petriNet={petriNet} />
 
                 {simulationResult && (
                     <SimulationResults result={simulationResult} />

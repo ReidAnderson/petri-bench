@@ -9,24 +9,30 @@ import { Arc, PetriNet, Place, SimulationStep, Transition } from '@/types'
  */
 export const createDefaultPetriNet = (): PetriNet => {
     const places: Place[] = [
-        { id: 'p1', name: 'P1', x: 200, y: 50, tokens: 1 },
-        { id: 'p2', name: 'P2', x: 325, y: 150, tokens: 0 },
-        { id: 'p3', name: 'P3', x: 75, y: 150, tokens: 0 },
+        { id: 'p1', name: 'Start', x: 100, y: 100, tokens: 2 },
+        { id: 'p2', name: 'Process A', x: 300, y: 100, tokens: 0 },
+        { id: 'p3', name: 'Process B', x: 300, y: 200, tokens: 0 },
+        { id: 'p4', name: 'Sync', x: 500, y: 150, tokens: 0 },
+        { id: 'p5', name: 'End', x: 700, y: 150, tokens: 0, maxTokens: 5 },
     ]
 
     const transitions: Transition[] = [
-        { id: 't1', name: 'T1', x: 260, y: 80, width: 15, height: 30, enabled: true },
-        { id: 't2', name: 'T2', x: 185, y: 225, width: 30, height: 15, enabled: false },
-        { id: 't3', name: 'T3', x: 125, y: 80, width: 15, height: 30, enabled: false },
+        { id: 't1', name: 'Split', x: 200, y: 100, width: 30, height: 50, enabled: true },
+        { id: 't2', name: 'TaskA', x: 400, y: 100, width: 30, height: 50, enabled: false },
+        { id: 't3', name: 'TaskB', x: 400, y: 200, width: 30, height: 50, enabled: false },
+        { id: 't4', name: 'Join', x: 600, y: 150, width: 30, height: 50, enabled: false },
     ]
 
     const arcs: Arc[] = [
         { id: 'a1', source: 'p1', target: 't1', weight: 1 },
         { id: 'a2', source: 't1', target: 'p2', weight: 1 },
-        { id: 'a3', source: 'p2', target: 't2', weight: 1 },
-        { id: 'a4', source: 't2', target: 'p3', weight: 1 },
+        { id: 'a3', source: 't1', target: 'p3', weight: 1 },
+        { id: 'a4', source: 'p2', target: 't2', weight: 1 },
         { id: 'a5', source: 'p3', target: 't3', weight: 1 },
-        { id: 'a6', source: 't3', target: 'p1', weight: 1 },
+        { id: 'a6', source: 't2', target: 'p4', weight: 1 },
+        { id: 'a7', source: 't3', target: 'p4', weight: 1 },
+        { id: 'a8', source: 'p4', target: 't4', weight: 2 },
+        { id: 'a9', source: 't4', target: 'p5', weight: 1 },
     ]
 
     return { places, transitions, arcs }

@@ -1,12 +1,16 @@
 import ConformanceControls from '@/components/ConformanceControls'
 import ConformanceResults from '@/components/ConformanceResults'
 import PetriNetVisualization from '@/components/PetriNetVisualization'
-import { ConformanceResult } from '@/types'
-import { useState } from 'react'
+import { ConformanceResult, PetriNet } from '@/types'
+import { createDefaultPetriNet } from '@/utils/petriNetUtils'
+import { useMemo, useState } from 'react'
 
 const ConformancePage: React.FC = () => {
     const [conformanceResult, setConformanceResult] = useState<ConformanceResult | null>(null)
     const [isLoading, setIsLoading] = useState(false)
+
+    // Use the default Petri net for now - in the future this could come from props or state
+    const petriNet: PetriNet = useMemo(() => createDefaultPetriNet(), [])
 
     const handleRunAnalysis = async () => {
         setIsLoading(true)
@@ -49,7 +53,7 @@ const ConformancePage: React.FC = () => {
             />
 
             <section className="w-full lg:w-2/3 xl:w-3/4 flex flex-col">
-                <PetriNetVisualization mode="conformance" />
+                <PetriNetVisualization mode="conformance" petriNet={petriNet} />
 
                 {conformanceResult && (
                     <ConformanceResults result={conformanceResult} />
