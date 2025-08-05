@@ -39,8 +39,154 @@ export const createDefaultPetriNet = (): PetriNet => {
 }
 
 /**
- * Simulates a Petri net for a given number of steps
+ * Determines which transitions are enabled based on current token distribution
  */
+export const getEnabledTransitions = (petriNet: PetriNet): string[] => {
+    const markings = petriNet.places.reduce((acc, place) => {
+        acc[place.id] = place.tokens
+        return acc
+    }, {} as Record<string, number>)
+
+    return petriNet.transitions.filter(transition => {
+        // Find input arcs (arcs targeting this transition)
+        const inputArcs = petriNet.arcs.filter(arc => arc.target === transition.id)
+        
+        // Check if all input places have enough tokens
+        return inputArcs.every(arc => {
+            const placeTokens = markings[arc.source] || 0
+            return placeTokens >= arc.weight
+        })
+    }).map(transition => transition.id)
+}
+
+/**
+ * Updates transition enabled states based on current markings
+ */
+export const updateTransitionStates = (petriNet: PetriNet): PetriNet => {
+    const enabledTransitionIds = getEnabledTransitions(petriNet)
+    
+    return {
+        ...petriNet,
+        transitions: petriNet.transitions.map(transition => ({
+            ...transition,
+            enabled: enabledTransitionIds.includes(transition.id)
+        }))
+    }
+}
+
+/**
+ * Fires a single transition and returns the updated Petri net
+ */
+export const fireTransition = (petriNet: PetriNet, transitionId: string): { petriNet: PetriNet; success: boolean; message?: string } => {
+    const transition = petriNet.transitions.find(t => t.id === transitionId)
+    if (!transition) {
+        return {
+            petriNet,
+            success: false,
+            message: `Transition ${transitionId} not found`
+        }
+    }
+
+    // Check if transition is enabled
+    const enabledTransitions = getEnabledTransitions(petriNet)
+    if (!enabledTransitions.includes(transitionId)) {
+        return {
+            petriNet,
+            success: false,
+            message: `Transition ${transition.name} is not enabled`
+        }
+    }
+
+    // Create new markings by firing the transition
+    const newPlaces = petriNet.places.map(place => {
+        let newTokens = place.tokens
+
+        // Remove tokens from input places
+        const inputArcs = petriNet.arcs.filter(arc => arc.source === place.id && arc.target === transitionId)
+        inputArcs.forEach(arc => {
+            newTokens -= arc.weight
+        })
+
+        // Add tokens to output places
+        const outputArcs = petriNet.arcs.filter(arc => arc.source === transitionId && arc.target === place.id)
+        outputArcs.forEach(arc => {
+            newTokens += arc.weight
+        })
+
+        // Check capacity constraints
+        if (place.maxTokens && newTokens > place.maxTokens) {
+            return place // Don't modify if capacity would be exceeded
+        }
+
+        return {
+            ...place,
+            tokens: Math.max(0, newTokens) // Ensure non-negative tokens
+        }
+    })
+
+    // Check if any capacity was exceeded
+    const capacityExceeded = petriNet.places.some(place => {
+        if (!place.maxTokens) return false
+        
+        const newPlace = newPlaces.find(p => p.id === place.id)
+        return newPlace && newPlace.tokens !== place.tokens && place.tokens === newPlace.tokens
+    })
+
+    if (capacityExceeded) {
+        return {
+            petriNet,
+            success: false,
+            message: `Firing ${transition.name} would exceed place capacity`
+        }
+    }
+
+    const newPetriNet: PetriNet = {
+        places: newPlaces,
+        transitions: petriNet.transitions,
+        arcs: petriNet.arcs
+    }
+
+    // Update transition enabled states
+    const updatedPetriNet = updateTransitionStates(newPetriNet)
+
+    return {
+        petriNet: updatedPetriNet,
+        success: true,
+        message: `Fired transition ${transition.name}`
+    }
+}
+
+/**
+ * Performs one step of simulation by firing a random enabled transition
+ */
+export const stepOnce = (petriNet: PetriNet): { petriNet: PetriNet; firedTransition?: string; message?: string } => {
+    const enabledTransitions = getEnabledTransitions(petriNet)
+    
+    if (enabledTransitions.length === 0) {
+        return {
+            petriNet: updateTransitionStates(petriNet),
+            message: 'No transitions are enabled'
+        }
+    }
+
+    // Fire a random enabled transition (for demonstration)
+    // In a real implementation, you might want to let the user choose
+    const randomTransition = enabledTransitions[Math.floor(Math.random() * enabledTransitions.length)]
+    const result = fireTransition(petriNet, randomTransition)
+
+    if (result.success) {
+        return {
+            petriNet: result.petriNet,
+            firedTransition: randomTransition,
+            message: result.message
+        }
+    } else {
+        return {
+            petriNet: updateTransitionStates(petriNet),
+            message: result.message
+        }
+    }
+}
 export const simulatePetriNet = (
     petriNet: PetriNet,
     steps: number
