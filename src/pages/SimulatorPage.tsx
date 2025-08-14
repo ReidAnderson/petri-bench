@@ -2,7 +2,7 @@ import PetriNetVisualization from '@/components/PetriNetVisualization'
 import SimulationControls from '@/components/SimulationControls'
 import SimulationResults from '@/components/SimulationResults'
 import { FileUploadResult, PetriNet, SimulationResult } from '@/types'
-import { createDefaultPetriNet, stepOnce, updateTransitionStates } from '@/utils/petriNetUtils'
+import { createDefaultPetriNet, fireTransition, stepOnce, updateTransitionStates } from '@/utils/petriNetUtils'
 import { useCallback, useState } from 'react'
 
 const SimulatorPage: React.FC = () => {
@@ -40,6 +40,13 @@ const SimulatorPage: React.FC = () => {
         }
 
         // Clear message after 3 seconds
+        setTimeout(() => setStepMessage(null), 3000)
+    }, [petriNet])
+
+    const handleFireTransition = useCallback((transitionId: string) => {
+        const result = fireTransition(petriNet, transitionId)
+        setPetriNet(result.petriNet)
+        setStepMessage(result.success ? `Fired transition: ${transitionId}` : (result.message || 'Transition not fired'))
         setTimeout(() => setStepMessage(null), 3000)
     }, [petriNet])
 
@@ -149,7 +156,7 @@ const SimulatorPage: React.FC = () => {
                     </div>
                 )}
 
-                <PetriNetVisualization mode="simulator" petriNet={petriNet} />
+                <PetriNetVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} />
 
                 {simulationResult && (
                     <SimulationResults result={simulationResult} />

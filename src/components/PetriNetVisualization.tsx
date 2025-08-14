@@ -6,15 +6,21 @@ import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 
 interface PetriNetVisualizationProps {
     mode: 'simulator' | 'conformance',
-    petriNet: PetriNet | null
+    petriNet: PetriNet | null,
+    onFireTransition?: (transitionId: string) => void
 }
 
-const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet }) => {
+const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition }) => {
     // Compute layout using d3-force when petriNet changes
     const layout = useMemo(() => {
         if (!petriNet) return null;
         return computeLayout(petriNet, 800, 600);
     }, [petriNet]);
+
+    // List of enabled transitions for display below the visualization
+    const enabledTransitions = useMemo(() => {
+        return petriNet ? petriNet.transitions.filter(t => t.enabled) : []
+    }, [petriNet])
 
     const renderPlace = useCallback((node: LayoutNode) => {
         const place = node.data as Place;
@@ -215,6 +221,12 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
     // Create lookup map for nodes
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
 
+    const handleEnabledClick = useCallback((id: string) => {
+        if (mode !== 'simulator') return
+        if (!onFireTransition) return
+        onFireTransition(id)
+    }, [mode, onFireTransition])
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-lg flex flex-col flex-shrink-0">
             <h2 className="text-xl font-semibold mb-4 border-b pb-3">
@@ -331,6 +343,30 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                         <span>Enabled</span>
                     </div>
                 </div>
+            </div>
+
+            {/* Enabled Transitions */}
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Enabled Transitions</h3>
+                {enabledTransitions.length > 0 ? (
+                    <ul className="flex flex-wrap gap-2">
+                        {enabledTransitions.map(t => (
+                            <li
+                                key={t.id}
+                                className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs border ${mode === 'simulator' && onFireTransition ? 'bg-emerald-50 text-emerald-800 border-emerald-200 cursor-pointer hover:ring-2 hover:ring-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-200'}`}
+                                title={t.id}
+                                onClick={() => handleEnabledClick(t.id)}
+                                role={mode === 'simulator' && onFireTransition ? 'button' : undefined}
+                                aria-disabled={mode !== 'simulator' || !onFireTransition}
+                            >
+                                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                <span className="font-medium">{t.name}</span>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-xs text-gray-500">None</p>
+                )}
             </div>
         </div>
     )

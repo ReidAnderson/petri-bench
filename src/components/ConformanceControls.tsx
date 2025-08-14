@@ -1,8 +1,8 @@
 import { FileUploadResult } from '@/types'
+import { parseCsvEventLog, parseXesEventLog } from '@/utils/eventLogUtils'
 import { parsePNML } from '@/utils/pnmlParser'
 import { Upload } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
-import { parseCsvEventLog, parseXesEventLog } from '@/utils/eventLogUtils'
 
 interface ConformanceControlsProps {
     onRunAnalysis: () => void

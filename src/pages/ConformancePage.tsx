@@ -1,7 +1,7 @@
 import ConformanceControls from '@/components/ConformanceControls'
 import ConformanceResults from '@/components/ConformanceResults'
 import PetriNetVisualization from '@/components/PetriNetVisualization'
-import { ConformanceResult, FileUploadResult, PetriNet, EventLog } from '@/types'
+import { ConformanceResult, EventLog, FileUploadResult, PetriNet } from '@/types'
 import { createDefaultPetriNet } from '@/utils/petriNetUtils'
 import { useCallback, useState } from 'react'
 

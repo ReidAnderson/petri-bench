@@ -1,4 +1,4 @@
-import { EventLog, LogEvent, Trace } from '@/types'
+import { EventLog, LogEvent, Trace } from '@/types';
 
 /**
  * Parse a CSV string into an EventLog structure.
