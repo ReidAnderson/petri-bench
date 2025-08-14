@@ -29,6 +29,37 @@ Collection of tools for quickly generating, analyzing, and exporting petri nets 
 - Deviation detection and highlighting
 - Event log statistics and insights
 
+## 📥 Event Log Formats (XES and CSV)
+
+The Event Log uploader accepts both XES (.xes) and CSV (.csv) files.
+
+### Supported CSV schema
+
+- Encoding: UTF-8
+- Delimiter: comma
+- Header row: required
+- Required columns (case-sensitive):
+  - case_id: Identifier of the trace/case
+  - activity: Activity name (maps to concept:name)
+  - timestamp: Event timestamp in ISO 8601 (e.g., 2024-01-01T10:00:00Z)
+- Optional columns:
+  - lifecycle: Lifecycle transition (e.g., start, complete)
+  - resource: Performer/owner
+  - Any additional columns are accepted but may be ignored in analysis
+- Row ordering: Events within the same case should be ordered by timestamp (ascending)
+
+Example CSV:
+
+case_id,activity,timestamp,lifecycle,resource
+trace_1,TaskA,2024-01-01T10:00:00Z,start,alice
+trace_1,TaskA,2024-01-01T10:05:00Z,complete,alice
+trace_1,TaskB,2024-01-01T11:00:00Z,complete,bob
+trace_2,TaskA,2024-01-02T09:30:00Z,complete,carol
+
+Notes:
+- Timestamps should include timezone (Z or offset). If missing, UTC is assumed.
+- The UI currently stores the uploaded event log content (XES/CSV) for analysis; more advanced parsing may be added.
+
 ## 🛠️ Development Setup
 
 ### Prerequisites

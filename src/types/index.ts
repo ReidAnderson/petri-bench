@@ -69,3 +69,23 @@ export interface FileUploadResult {
     error?: string
     filename: string
 }
+
+// Parsed Event Log types
+export interface LogEvent {
+    activity: string
+    timestamp: string
+    lifecycle?: string
+    resource?: string
+    // Additional attributes
+    [key: string]: any
+}
+
+export interface Trace {
+    id: string
+    events: LogEvent[]
+}
+
+export interface EventLog {
+    traces: Trace[]
+    totalEvents: number
+}

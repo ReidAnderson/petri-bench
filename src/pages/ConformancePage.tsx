@@ -1,7 +1,7 @@
 import ConformanceControls from '@/components/ConformanceControls'
 import ConformanceResults from '@/components/ConformanceResults'
 import PetriNetVisualization from '@/components/PetriNetVisualization'
-import { ConformanceResult, FileUploadResult, PetriNet } from '@/types'
+import { ConformanceResult, FileUploadResult, PetriNet, EventLog } from '@/types'
 import { createDefaultPetriNet } from '@/utils/petriNetUtils'
 import { useCallback, useState } from 'react'
 
@@ -9,6 +9,7 @@ const ConformancePage: React.FC = () => {
     const [petriNet, setPetriNet] = useState<PetriNet>(() => createDefaultPetriNet())
     const [currentFileName, setCurrentFileName] = useState<string>('default_petri_net.pnml')
     const [currentXesFileName, setCurrentXesFileName] = useState<string>()
+    const [eventLog, setEventLog] = useState<EventLog | null>(null)
     const [conformanceResult, setConformanceResult] = useState<ConformanceResult | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
@@ -28,21 +29,37 @@ const ConformancePage: React.FC = () => {
 
     const handleXesFileUpload = useCallback((result: FileUploadResult) => {
         if (result.success) {
+            // result.data will be EventLog (for CSV or XES)
             setCurrentXesFileName(result.filename)
+            setEventLog((result as any).data ?? null)
             setUploadError(null)
-            // Reset conformance results when a new XES file is loaded
+            // Reset conformance results when a new event log file is loaded
             setConformanceResult(null)
         } else {
-            setUploadError(result.error || 'Unknown XES file error occurred')
-            console.error('XES file upload failed:', result.error)
+            setUploadError(result.error || 'Unknown event log file error occurred')
+            console.error('Event log file upload failed:', result.error)
         }
     }, [])
 
     const handleRunAnalysis = async () => {
         setIsLoading(true)
 
+        // TODO: Use `eventLog` with `petriNet` in real conformance analysis
+
         // Simulate async operation
         await new Promise(resolve => setTimeout(resolve, 1500))
+
+        // Derive simple stats from uploaded eventLog if provided
+        const stats = (() => {
+            if (eventLog) {
+                return {
+                    traces: eventLog.traces.length,
+                    totalEvents: eventLog.totalEvents,
+                    avgDuration: '-' // placeholder
+                }
+            }
+            return { traces: 0, totalEvents: 0, avgDuration: '-' }
+        })()
 
         // Mock conformance result
         const mockResult: ConformanceResult = {
@@ -56,15 +73,11 @@ const ConformancePage: React.FC = () => {
                 },
                 {
                     type: 'missing',
-                    description: "Path from T3 to P1 was never taken in the log.",
+                    description: 'Path from T3 to P1 was never taken in the log.',
                     severity: 'medium'
                 }
             ],
-            eventLogStats: {
-                traces: 50,
-                totalEvents: 432,
-                avgDuration: '2.7 days'
-            }
+            eventLogStats: stats
         }
 
         setConformanceResult(mockResult)

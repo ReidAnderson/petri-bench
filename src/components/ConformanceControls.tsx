@@ -2,6 +2,7 @@ import { FileUploadResult } from '@/types'
 import { parsePNML } from '@/utils/pnmlParser'
 import { Upload } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
+import { parseCsvEventLog, parseXesEventLog } from '@/utils/eventLogUtils'
 
 interface ConformanceControlsProps {
     onRunAnalysis: () => void
@@ -61,10 +62,11 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
     const handleXesFile = useCallback((file: File) => {
         if (!onXesFileUpload) return
 
-        if (!file.name.toLowerCase().endsWith('.xes')) {
+        const lowerName = file.name.toLowerCase()
+        if (!lowerName.endsWith('.xes') && !lowerName.endsWith('.csv')) {
             onXesFileUpload({
                 success: false,
-                error: 'Please select an XES file (.xes extension)',
+                error: 'Please select an XES or CSV file (.xes or .csv extension)',
                 filename: file.name
             })
             return
@@ -73,20 +75,33 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
         const reader = new FileReader()
         reader.onload = (e) => {
             const content = e.target?.result as string
-            if (content) {
-                // For now, just store the content as-is
-                // Later this could be parsed into a structured format
-                onXesFileUpload({
-                    success: true,
-                    data: content,
-                    filename: file.name
-                })
+            if (!content) {
+                onXesFileUpload({ success: false, error: 'Empty event log file', filename: file.name })
+                return
             }
+
+            if (lowerName.endsWith('.csv')) {
+                const parsed = parseCsvEventLog(content)
+                if (!parsed.success || !parsed.eventLog) {
+                    onXesFileUpload({ success: false, error: parsed.error || 'Invalid CSV format', filename: file.name })
+                    return
+                }
+                onXesFileUpload({ success: true, data: parsed.eventLog, filename: file.name })
+                return
+            }
+
+            // XES: parse into EventLog structure
+            const parsedXes = parseXesEventLog(content)
+            if (!parsedXes.success || !parsedXes.eventLog) {
+                onXesFileUpload({ success: false, error: parsedXes.error || 'Invalid XES format', filename: file.name })
+                return
+            }
+            onXesFileUpload({ success: true, data: parsedXes.eventLog, filename: file.name })
         }
         reader.onerror = () => {
             onXesFileUpload({
                 success: false,
-                error: 'Failed to read XES file',
+                error: 'Failed to read event log file (XES/CSV)',
                 filename: file.name
             })
         }
@@ -156,14 +171,14 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
         setIsXesDragOver(false)
 
         const files = Array.from(e.dataTransfer.files)
-        const xesFile = files.find(file => file.name.toLowerCase().endsWith('.xes'))
+        const eventLogFile = files.find(file => /\.(xes|csv)$/i.test(file.name))
 
-        if (xesFile) {
-            handleXesFile(xesFile)
+        if (eventLogFile) {
+            handleXesFile(eventLogFile)
         } else if (files.length > 0 && onXesFileUpload) {
             onXesFileUpload({
                 success: false,
-                error: 'Please drop an XES file (.xes extension)',
+                error: 'Please drop an XES or CSV file (.xes or .csv extension)',
                 filename: files[0].name
             })
         }
@@ -217,7 +232,7 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
                     </div>
                 </div>
 
-                {/* XES Upload */}
+                {/* XES/CSV Upload */}
                 <div>
                     <label className="font-medium text-slate-700 text-sm">Event Log</label>
                     <div
@@ -234,16 +249,17 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
                             ref={xesFileInputRef}
                             type="file"
                             className="hidden"
-                            accept=".xes"
+                            accept=".xes,.csv"
                             onChange={handleXesFileSelect}
                         />
                         <Upload className={`mx-auto h-8 w-8 ${isXesDragOver ? 'text-indigo-500' : 'text-slate-400'}`} />
                         <p className="mt-1 text-sm text-slate-600">
                             <span className="font-semibold text-indigo-600">
-                                {isXesDragOver ? 'Drop XES here' : 'Upload XES'}
+                                {isXesDragOver ? 'Drop XES or CSV here' : 'Upload XES'}
                             </span>
                         </p>
                         <p className="text-xs text-slate-500">or drag and drop</p>
+                        <p className="text-xs text-slate-400 mt-1">Supported: .xes, .csv</p>
                     </div>
                     {currentXesFileName && (
                         <div className="mt-2 text-sm text-center text-slate-700">
