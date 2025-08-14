@@ -8,6 +8,7 @@ import { useCallback, useState } from 'react'
 const ConformancePage: React.FC = () => {
     const [petriNet, setPetriNet] = useState<PetriNet>(() => createDefaultPetriNet())
     const [currentFileName, setCurrentFileName] = useState<string>('default_petri_net.pnml')
+    const [currentXesFileName, setCurrentXesFileName] = useState<string>()
     const [conformanceResult, setConformanceResult] = useState<ConformanceResult | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
@@ -22,6 +23,18 @@ const ConformancePage: React.FC = () => {
         } else {
             setUploadError(result.error || 'Unknown error occurred')
             console.error('File upload failed:', result.error)
+        }
+    }, [])
+
+    const handleXesFileUpload = useCallback((result: FileUploadResult) => {
+        if (result.success) {
+            setCurrentXesFileName(result.filename)
+            setUploadError(null)
+            // Reset conformance results when a new XES file is loaded
+            setConformanceResult(null)
+        } else {
+            setUploadError(result.error || 'Unknown XES file error occurred')
+            console.error('XES file upload failed:', result.error)
         }
     }, [])
 
@@ -63,8 +76,10 @@ const ConformancePage: React.FC = () => {
             <ConformanceControls
                 onRunAnalysis={handleRunAnalysis}
                 onFileUpload={handleFileUpload}
+                onXesFileUpload={handleXesFileUpload}
                 isLoading={isLoading}
                 currentFileName={currentFileName}
+                currentXesFileName={currentXesFileName}
             />
 
             <section className="w-full lg:w-2/3 xl:w-3/4 flex flex-col">

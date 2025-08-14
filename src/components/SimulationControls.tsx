@@ -107,8 +107,8 @@ const SimulationControls: React.FC<SimulationControlsProps> = ({
                 <h2 className="text-xl font-semibold mb-4 border-b pb-3">1. Load Petri Net</h2>
                 <div
                     className={`file-upload-area border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${isDragOver
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
                         }`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}

@@ -6,19 +6,24 @@ import { useCallback, useRef, useState } from 'react'
 interface ConformanceControlsProps {
     onRunAnalysis: () => void
     onFileUpload: (result: FileUploadResult) => void
+    onXesFileUpload?: (result: FileUploadResult) => void
     isLoading: boolean
     currentFileName?: string
+    currentXesFileName?: string
 }
 
 const ConformanceControls: React.FC<ConformanceControlsProps> = ({
     onRunAnalysis,
     onFileUpload,
+    onXesFileUpload,
     isLoading,
-    currentFileName = 'default_petri_net.pnml'
+    currentFileName = 'default_petri_net.pnml',
+    currentXesFileName
 }) => {
     const [isDragOver, setIsDragOver] = useState(false)
-    const [xesFile] = useState<string | null>('event_log.xes')
+    const [isXesDragOver, setIsXesDragOver] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const xesFileInputRef = useRef<HTMLInputElement>(null)
 
     const handleFile = useCallback((file: File) => {
         if (!file.name.toLowerCase().endsWith('.pnml')) {
@@ -53,6 +58,41 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
         reader.readAsText(file)
     }, [onFileUpload])
 
+    const handleXesFile = useCallback((file: File) => {
+        if (!onXesFileUpload) return
+
+        if (!file.name.toLowerCase().endsWith('.xes')) {
+            onXesFileUpload({
+                success: false,
+                error: 'Please select an XES file (.xes extension)',
+                filename: file.name
+            })
+            return
+        }
+
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            const content = e.target?.result as string
+            if (content) {
+                // For now, just store the content as-is
+                // Later this could be parsed into a structured format
+                onXesFileUpload({
+                    success: true,
+                    data: content,
+                    filename: file.name
+                })
+            }
+        }
+        reader.onerror = () => {
+            onXesFileUpload({
+                success: false,
+                error: 'Failed to read XES file',
+                filename: file.name
+            })
+        }
+        reader.readAsText(file)
+    }, [onXesFileUpload])
+
     const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (file) {
@@ -62,6 +102,16 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
             fileInputRef.current.value = ''
         }
     }, [handleFile])
+
+    const handleXesFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            handleXesFile(file)
+        }
+        if (xesFileInputRef.current) {
+            xesFileInputRef.current.value = ''
+        }
+    }, [handleXesFile])
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault()
@@ -91,8 +141,40 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
         }
     }, [handleFile, onFileUpload])
 
+    const handleXesDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        setIsXesDragOver(true)
+    }, [])
+
+    const handleXesDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        setIsXesDragOver(false)
+    }, [])
+
+    const handleXesDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        setIsXesDragOver(false)
+
+        const files = Array.from(e.dataTransfer.files)
+        const xesFile = files.find(file => file.name.toLowerCase().endsWith('.xes'))
+
+        if (xesFile) {
+            handleXesFile(xesFile)
+        } else if (files.length > 0 && onXesFileUpload) {
+            onXesFileUpload({
+                success: false,
+                error: 'Please drop an XES file (.xes extension)',
+                filename: files[0].name
+            })
+        }
+    }, [handleXesFile, onXesFileUpload])
+
     const openFileDialog = useCallback(() => {
         fileInputRef.current?.click()
+    }, [])
+
+    const openXesFileDialog = useCallback(() => {
+        xesFileInputRef.current?.click()
     }, [])
 
     return (
@@ -106,8 +188,8 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
                     <label className="font-medium text-slate-700 text-sm">Petri Net Model</label>
                     <div
                         className={`mt-1 file-upload-area border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${isDragOver
-                                ? 'border-indigo-500 bg-indigo-50'
-                                : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50'
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50'
                             }`}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
@@ -138,18 +220,35 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
                 {/* XES Upload */}
                 <div>
                     <label className="font-medium text-slate-700 text-sm">Event Log</label>
-                    <div className="mt-1 file-upload-area border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
-                        <input type="file" className="hidden" accept=".xes" />
-                        <Upload className="mx-auto h-8 w-8 text-slate-400" />
+                    <div
+                        className={`mt-1 file-upload-area border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${isXesDragOver
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50'
+                            }`}
+                        onDragOver={handleXesDragOver}
+                        onDragLeave={handleXesDragLeave}
+                        onDrop={handleXesDrop}
+                        onClick={openXesFileDialog}
+                    >
+                        <input
+                            ref={xesFileInputRef}
+                            type="file"
+                            className="hidden"
+                            accept=".xes"
+                            onChange={handleXesFileSelect}
+                        />
+                        <Upload className={`mx-auto h-8 w-8 ${isXesDragOver ? 'text-indigo-500' : 'text-slate-400'}`} />
                         <p className="mt-1 text-sm text-slate-600">
-                            <span className="font-semibold text-indigo-600">Upload XES</span>
+                            <span className="font-semibold text-indigo-600">
+                                {isXesDragOver ? 'Drop XES here' : 'Upload XES'}
+                            </span>
                         </p>
-                        <p className="text-xs text-slate-500">Event log file</p>
+                        <p className="text-xs text-slate-500">or drag and drop</p>
                     </div>
-                    {xesFile && (
+                    {currentXesFileName && (
                         <div className="mt-2 text-sm text-center text-slate-700">
                             <p className="font-medium text-slate-600">Loaded:</p>
-                            <p className="text-indigo-700 font-semibold">{xesFile}</p>
+                            <p className="text-indigo-700 font-semibold truncate">{currentXesFileName}</p>
                         </div>
                     )}
                 </div>
@@ -163,7 +262,7 @@ const ConformanceControls: React.FC<ConformanceControlsProps> = ({
                 </p>
                 <button
                     onClick={onRunAnalysis}
-                    disabled={isLoading || !currentFileName || !xesFile}
+                    disabled={isLoading || !currentFileName || !currentXesFileName}
                     className="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                 >
                     {isLoading ? 'Analyzing...' : 'Run Analysis'}

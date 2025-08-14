@@ -9,7 +9,7 @@ import { Arc, PetriNet, Place, SimulationStep, Transition } from '@/types'
  */
 export const createDefaultPetriNet = (): PetriNet => {
     const places: Place[] = [
-        { id: 'p1', name: 'Start', x: 100, y: 100, tokens: 2 },
+        { id: 'p1', name: 'Start', x: 100, y: 100, tokens: 1 },
         { id: 'p2', name: 'Process A', x: 300, y: 100, tokens: 0 },
         { id: 'p3', name: 'Process B', x: 300, y: 200, tokens: 0 },
         { id: 'p4', name: 'Sync', x: 500, y: 150, tokens: 0 },
@@ -50,7 +50,7 @@ export const getEnabledTransitions = (petriNet: PetriNet): string[] => {
     return petriNet.transitions.filter(transition => {
         // Find input arcs (arcs targeting this transition)
         const inputArcs = petriNet.arcs.filter(arc => arc.target === transition.id)
-        
+
         // Check if all input places have enough tokens
         return inputArcs.every(arc => {
             const placeTokens = markings[arc.source] || 0
@@ -64,7 +64,7 @@ export const getEnabledTransitions = (petriNet: PetriNet): string[] => {
  */
 export const updateTransitionStates = (petriNet: PetriNet): PetriNet => {
     const enabledTransitionIds = getEnabledTransitions(petriNet)
-    
+
     return {
         ...petriNet,
         transitions: petriNet.transitions.map(transition => ({
@@ -127,7 +127,7 @@ export const fireTransition = (petriNet: PetriNet, transitionId: string): { petr
     // Check if any capacity was exceeded
     const capacityExceeded = petriNet.places.some(place => {
         if (!place.maxTokens) return false
-        
+
         const newPlace = newPlaces.find(p => p.id === place.id)
         return newPlace && newPlace.tokens !== place.tokens && place.tokens === newPlace.tokens
     })
@@ -161,7 +161,7 @@ export const fireTransition = (petriNet: PetriNet, transitionId: string): { petr
  */
 export const stepOnce = (petriNet: PetriNet): { petriNet: PetriNet; firedTransition?: string; message?: string } => {
     const enabledTransitions = getEnabledTransitions(petriNet)
-    
+
     if (enabledTransitions.length === 0) {
         return {
             petriNet: updateTransitionStates(petriNet),

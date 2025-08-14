@@ -32,13 +32,13 @@ const SimulatorPage: React.FC = () => {
     const handleStepOnce = useCallback(() => {
         const result = stepOnce(petriNet)
         setPetriNet(result.petriNet)
-        
+
         if (result.firedTransition) {
             setStepMessage(`Fired transition: ${result.firedTransition}`)
         } else {
             setStepMessage(result.message || 'No transition fired')
         }
-        
+
         // Clear message after 3 seconds
         setTimeout(() => setStepMessage(null), 3000)
     }, [petriNet])
