@@ -7,10 +7,11 @@ import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 interface PetriNetVisualizationProps {
     mode: 'simulator' | 'conformance',
     petriNet: PetriNet | null,
-    onFireTransition?: (transitionId: string) => void
+    onFireTransition?: (transitionId: string) => void,
+    onSelectElement?: (sel: { type: 'place' | 'transition'; id: string }) => void,
 }
 
-const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition }) => {
+const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition, onSelectElement }) => {
     // Compute layout using d3-force when petriNet changes
     const layout = useMemo(() => {
         if (!petriNet) return null;
@@ -22,6 +23,12 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
         return petriNet ? petriNet.transitions.filter(t => t.enabled) : []
     }, [petriNet])
 
+    const handleSelect = useCallback((type: 'place' | 'transition', id: string) => {
+        if (mode !== 'simulator') return
+        if (!onSelectElement) return
+        onSelectElement({ type, id })
+    }, [mode, onSelectElement])
+
     const renderPlace = useCallback((node: LayoutNode) => {
         const place = node.data as Place;
         const x = node.x || 0;
@@ -30,7 +37,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
         const tokenPositions = getTokenPositions(place, radius);
 
         return (
-            <g key={place.id} className="place-group">
+            <g key={place.id} className="place-group" onClick={() => handleSelect('place', place.id)} role={mode === 'simulator' ? 'button' as any : undefined}>
                 {/* Place circle */}
                 <circle
                     cx={x}
@@ -96,7 +103,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                 )}
             </g>
         );
-    }, []);
+    }, [handleSelect, mode]);
 
     const renderTransition = useCallback((node: LayoutNode) => {
         const transition = node.data as Transition;
@@ -106,7 +113,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
         const height = 50;
 
         return (
-            <g key={transition.id} className="transition-group">
+            <g key={transition.id} className="transition-group" onClick={() => handleSelect('transition', transition.id)} role={mode === 'simulator' ? 'button' as any : undefined}>
                 {/* Transition rectangle */}
                 <rect
                     x={x - width / 2}
@@ -143,7 +150,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                 )}
             </g>
         );
-    }, []);
+    }, [handleSelect, mode]);
 
     const renderArc = useCallback((link: LayoutLink, sourceNode: LayoutNode, targetNode: LayoutNode) => {
         const sourceX = sourceNode.x || 0;

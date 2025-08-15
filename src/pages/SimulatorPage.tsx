@@ -3,7 +3,8 @@ import SimulationControls from '@/components/SimulationControls'
 import SimulationResults from '@/components/SimulationResults'
 import { FileUploadResult, PetriNet, SimulationResult } from '@/types'
 import { createDefaultPetriNet, fireTransition, stepOnce, updateTransitionStates } from '@/utils/petriNetUtils'
-import { useCallback, useState } from 'react'
+import { Copy } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
 
 const SimulatorPage: React.FC = () => {
     const [petriNet, setPetriNet] = useState<PetriNet>(() => updateTransitionStates(createDefaultPetriNet()))
@@ -12,6 +13,11 @@ const SimulatorPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
     const [stepMessage, setStepMessage] = useState<string | null>(null)
+    const [selected, setSelected] = useState<{ type: 'place' | 'transition'; id: string } | null>(null)
+    const [copyMsg, setCopyMsg] = useState<string | null>(null)
+
+    const selectedPlace = useMemo(() => selected?.type === 'place' ? petriNet.places.find(p => p.id === selected.id) ?? null : null, [selected, petriNet])
+    const selectedTransition = useMemo(() => selected?.type === 'transition' ? petriNet.transitions.find(t => t.id === selected.id) ?? null : null, [selected, petriNet])
 
     const handleFileUpload = useCallback((result: FileUploadResult) => {
         if (result.success && result.data) {
@@ -20,11 +26,10 @@ const SimulatorPage: React.FC = () => {
             setCurrentFileName(result.filename)
             setUploadError(null)
             setStepMessage(null)
-            // Reset simulation results when a new file is loaded
             setSimulationResult(null)
+            setSelected(null)
         } else {
             setUploadError(result.error || 'Unknown error occurred')
-            // You could also show a toast notification here
             console.error('File upload failed:', result.error)
         }
     }, [])
@@ -39,7 +44,6 @@ const SimulatorPage: React.FC = () => {
             setStepMessage(result.message || 'No transition fired')
         }
 
-        // Clear message after 3 seconds
         setTimeout(() => setStepMessage(null), 3000)
     }, [petriNet])
 
@@ -52,18 +56,13 @@ const SimulatorPage: React.FC = () => {
 
     const handleRunSimulation = async (steps: number) => {
         setIsLoading(true)
-
-        // Simulate async operation
         await new Promise(resolve => setTimeout(resolve, 1000))
-
-        // Mock simulation result - in a real app, this would use the actual petriNet
         const mockResult: SimulationResult = {
             steps: [],
             firingCounts: { t1: 5, t2: 3, t3: 2 },
             boundedness: '1-Bounded',
             totalSteps: steps
         }
-
         setSimulationResult(mockResult)
         setIsLoading(false)
     }
@@ -72,11 +71,133 @@ const SimulatorPage: React.FC = () => {
         setSimulationResult(null)
         setUploadError(null)
         setStepMessage(null)
-        // Reset to initial state with updated transition states
         const resetNet = updateTransitionStates(createDefaultPetriNet())
         setPetriNet(resetNet)
         setCurrentFileName('default_petri_net.pnml')
+        setSelected(null)
     }
+
+    const handleSelectElement = useCallback((sel: { type: 'place' | 'transition'; id: string }) => {
+        setSelected(sel)
+    }, [])
+
+    const handleUpdatePlace = useCallback((id: string, changes: Partial<PetriNet['places'][number]>) => {
+        setPetriNet(prev => {
+            const oldId = id
+            const requestedId = typeof changes.id === 'string' ? changes.id.trim() : undefined
+            const willRename = requestedId && requestedId !== oldId
+
+            // Validate uniqueness across places and transitions when renaming
+            const isTaken = (candidate: string) =>
+                prev.places.some(p => p.id === candidate) || prev.transitions.some(t => t.id === candidate)
+
+            let newId = oldId
+            if (willRename) {
+                if (!requestedId || isTaken(requestedId)) {
+                    // Ignore invalid/duplicate id changes
+                    newId = oldId
+                } else {
+                    newId = requestedId
+                }
+            }
+
+            const nextPlaces = prev.places.map(p => {
+                if (p.id !== oldId) return p
+                const nextTokens = changes.tokens !== undefined ? Math.max(0, Math.floor(changes.tokens)) : p.tokens
+                const nextMax = changes.maxTokens !== undefined ? (changes.maxTokens === null ? undefined : Math.max(0, Math.floor(changes.maxTokens))) : p.maxTokens
+                const clampedTokens = nextMax !== undefined ? Math.min(nextTokens, nextMax) : nextTokens
+                return {
+                    ...p,
+                    ...changes,
+                    id: newId,
+                    tokens: clampedTokens,
+                    maxTokens: nextMax,
+                }
+            })
+
+            // If id changed, update arcs referencing this place
+            const nextArcs = willRename && newId !== oldId && requestedId && !isTaken(requestedId)
+                ? prev.arcs.map(a => ({
+                    ...a,
+                    source: a.source === oldId ? newId : a.source,
+                    target: a.target === oldId ? newId : a.target,
+                }))
+                : prev.arcs
+
+            const updated = updateTransitionStates({ ...prev, places: nextPlaces, arcs: nextArcs })
+
+            // Keep selection in sync
+            if (willRename && newId !== oldId && requestedId && !isTaken(requestedId)) {
+                setSelected(sel => sel && sel.type === 'place' && sel.id === oldId ? { type: 'place', id: newId } : sel)
+            }
+
+            return updated
+        })
+    }, [])
+
+    const handleUpdateTransition = useCallback((id: string, changes: Partial<PetriNet['transitions'][number]>) => {
+        setPetriNet(prev => {
+            const oldId = id
+            const requestedId = typeof changes.id === 'string' ? changes.id.trim() : undefined
+            const willRename = requestedId && requestedId !== oldId
+
+            const isTaken = (candidate: string) =>
+                prev.places.some(p => p.id === candidate) || prev.transitions.some(t => t.id === candidate)
+
+            let newId = oldId
+            if (willRename) {
+                if (!requestedId || isTaken(requestedId)) {
+                    newId = oldId
+                } else {
+                    newId = requestedId
+                }
+            }
+
+            const nextTransitions = prev.transitions.map(t => t.id === oldId ? { ...t, ...changes, id: newId } : t)
+
+            // If id changed, update arcs referencing this transition
+            const nextArcs = willRename && newId !== oldId && requestedId && !isTaken(requestedId)
+                ? prev.arcs.map(a => ({
+                    ...a,
+                    source: a.source === oldId ? newId : a.source,
+                    target: a.target === oldId ? newId : a.target,
+                }))
+                : prev.arcs
+
+            const updated = updateTransitionStates({ ...prev, transitions: nextTransitions, arcs: nextArcs })
+
+            if (willRename && newId !== oldId && requestedId && !isTaken(requestedId)) {
+                setSelected(sel => sel && sel.type === 'transition' && sel.id === oldId ? { type: 'transition', id: newId } : sel)
+            }
+
+            return updated
+        })
+    }, [])
+
+    const handleCopyNet = useCallback(async () => {
+        try {
+            const data = JSON.stringify(petriNet, null, 2)
+            if (navigator && 'clipboard' in navigator && (navigator as any).clipboard?.writeText) {
+                await (navigator as any).clipboard.writeText(data)
+            } else {
+                // Fallback for older browsers
+                const textarea = document.createElement('textarea')
+                textarea.value = data
+                textarea.style.position = 'fixed'
+                textarea.style.left = '-9999px'
+                document.body.appendChild(textarea)
+                textarea.focus()
+                textarea.select()
+                document.execCommand('copy')
+                document.body.removeChild(textarea)
+            }
+            setCopyMsg('Copied!')
+        } catch (e) {
+            setCopyMsg('Copy failed')
+        } finally {
+            setTimeout(() => setCopyMsg(null), 2000)
+        }
+    }, [petriNet])
 
     return (
         <div className="flex flex-col lg:flex-row gap-8 h-full">
@@ -87,6 +208,11 @@ const SimulatorPage: React.FC = () => {
                 onFileUpload={handleFileUpload}
                 isLoading={isLoading}
                 currentFileName={currentFileName}
+                selectedPlace={selectedPlace}
+                selectedTransition={selectedTransition}
+                onUpdatePlace={handleUpdatePlace}
+                onUpdateTransition={handleUpdateTransition}
+                onClearSelection={() => setSelected(null)}
             />
 
             <section className="main-panel w-full lg:w-2/3 xl:w-3/4 flex flex-col">
@@ -156,7 +282,23 @@ const SimulatorPage: React.FC = () => {
                     </div>
                 )}
 
-                <PetriNetVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} />
+                {/* Copy JSON toolbar */}
+                <div className="mb-2 flex items-center justify-end gap-3">
+                    <button
+                        type="button"
+                        onClick={handleCopyNet}
+                        className="inline-flex items-center gap-2 bg-slate-600 text-white font-medium py-1.5 px-3 rounded-lg hover:bg-slate-700"
+                        title="Copy current Petri Net JSON to clipboard"
+                    >
+                        <Copy size={16} />
+                        Copy JSON
+                    </button>
+                    {copyMsg && (
+                        <span className={`text-xs ${copyMsg === 'Copied!' ? 'text-emerald-700' : 'text-red-600'}`}>{copyMsg}</span>
+                    )}
+                </div>
+
+                <PetriNetVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} onSelectElement={handleSelectElement} />
 
                 {simulationResult && (
                     <SimulationResults result={simulationResult} />
