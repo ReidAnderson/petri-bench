@@ -9,9 +9,10 @@ interface PetriNetVisualizationProps {
     petriNet: PetriNet | null,
     onFireTransition?: (transitionId: string) => void,
     onSelectElement?: (sel: { type: 'place' | 'transition'; id: string }) => void,
+    highlightedTransitionId?: string,
 }
 
-const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition, onSelectElement }) => {
+const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition, onSelectElement, highlightedTransitionId }) => {
     // Compute layout using d3-force when petriNet changes
     const layout = useMemo(() => {
         if (!petriNet) return null;
@@ -111,6 +112,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
         const y = node.y || 0;
         const width = 30;
         const height = 50;
+        const isHighlighted = highlightedTransitionId === transition.id;
 
         return (
             <g key={transition.id} className="transition-group" onClick={() => handleSelect('transition', transition.id)} role={mode === 'simulator' ? 'button' as any : undefined}>
@@ -120,10 +122,10 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                     y={y - height / 2}
                     width={width}
                     height={height}
-                    fill={transition.enabled ? "#f1f5f9" : "#f8fafc"}
-                    stroke={transition.enabled ? "#64748b" : "#cbd5e1"}
-                    strokeWidth="2"
-                    className="hover:fill-gray-100 transition-colors cursor-pointer"
+                    fill={isHighlighted ? '#ecfeff' : (transition.enabled ? '#f1f5f9' : '#f8fafc')}
+                    stroke={isHighlighted ? '#10b981' : (transition.enabled ? '#64748b' : '#cbd5e1')}
+                    strokeWidth={isHighlighted ? 3 : 2}
+                    className={`hover:fill-gray-100 transition-colors cursor-pointer ${isHighlighted ? 'animate-pulse' : ''}`}
                 />
 
                 {/* Transition label */}
@@ -150,7 +152,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                 )}
             </g>
         );
-    }, [handleSelect, mode]);
+    }, [handleSelect, mode, highlightedTransitionId]);
 
     const renderArc = useCallback((link: LayoutLink, sourceNode: LayoutNode, targetNode: LayoutNode) => {
         const sourceX = sourceNode.x || 0;

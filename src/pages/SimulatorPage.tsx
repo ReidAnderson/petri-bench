@@ -1,8 +1,9 @@
 import PetriNetVisualization from '@/components/PetriNetVisualization'
 import SimulationControls from '@/components/SimulationControls'
 import SimulationResults from '@/components/SimulationResults'
-import { FileUploadResult, PetriNet, SimulationResult } from '@/types'
-import { createDefaultPetriNet, fireTransition, stepOnce, updateTransitionStates } from '@/utils/petriNetUtils'
+import TraceViewer from '@/components/TraceViewer'
+import { ExecutionTrace, FileUploadResult, PetriNet, SimulationResult, SimulationStep } from '@/types'
+import { createDefaultPetriNet, fireTransition, simulatePetriNet, stepOnce, updateTransitionStates } from '@/utils/petriNetUtils'
 import { Copy } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -15,6 +16,8 @@ const SimulatorPage: React.FC = () => {
     const [stepMessage, setStepMessage] = useState<string | null>(null)
     const [selected, setSelected] = useState<{ type: 'place' | 'transition'; id: string } | null>(null)
     const [copyMsg, setCopyMsg] = useState<string | null>(null)
+    const [traces, setTraces] = useState<ExecutionTrace[]>([])
+    const [highlightedTransitionId, setHighlightedTransitionId] = useState<string | undefined>(undefined)
 
     const selectedPlace = useMemo(() => selected?.type === 'place' ? petriNet.places.find(p => p.id === selected.id) ?? null : null, [selected, petriNet])
     const selectedTransition = useMemo(() => selected?.type === 'transition' ? petriNet.transitions.find(t => t.id === selected.id) ?? null : null, [selected, petriNet])
@@ -28,42 +31,86 @@ const SimulatorPage: React.FC = () => {
             setStepMessage(null)
             setSimulationResult(null)
             setSelected(null)
+            setTraces([])
+            setHighlightedTransitionId(undefined)
         } else {
             setUploadError(result.error || 'Unknown error occurred')
             console.error('File upload failed:', result.error)
         }
     }, [])
 
+    const pushManualStep = useCallback((net: PetriNet, firedTransition?: string) => {
+        setTraces(prev => {
+            const nowISO = new Date().toISOString()
+            const markings: Record<string, number> = net.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>)
+            const last = prev[0]
+            if (last && last.source === 'manual') {
+                const step: SimulationStep = { step: last.steps.length + 1, markings, firedTransition, timestamp: nowISO }
+                const updated = { ...last, steps: [...last.steps, step] }
+                return [updated, ...prev.slice(1)]
+            }
+            const firstStep: SimulationStep = { step: 1, markings, firedTransition, timestamp: nowISO }
+            const startMarkings: Record<string, number> = petriNet.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>)
+            const newTrace: ExecutionTrace = {
+                id: `manual-${nowISO}`,
+                label: `Manual ${new Date(nowISO).toLocaleTimeString()}`,
+                steps: [firstStep],
+                source: 'manual',
+                createdAt: nowISO,
+                startMarkings,
+            }
+            return [newTrace, ...prev]
+        })
+    }, [petriNet])
+
     const handleStepOnce = useCallback(() => {
         const result = stepOnce(petriNet)
         setPetriNet(result.petriNet)
-
+        setHighlightedTransitionId(result.firedTransition)
+        pushManualStep(result.petriNet, result.firedTransition)
         if (result.firedTransition) {
             setStepMessage(`Fired transition: ${result.firedTransition}`)
         } else {
             setStepMessage(result.message || 'No transition fired')
         }
-
         setTimeout(() => setStepMessage(null), 3000)
-    }, [petriNet])
+        setTimeout(() => setHighlightedTransitionId(undefined), 1000)
+    }, [petriNet, pushManualStep])
 
     const handleFireTransition = useCallback((transitionId: string) => {
         const result = fireTransition(petriNet, transitionId)
         setPetriNet(result.petriNet)
+        setHighlightedTransitionId(result.success ? transitionId : undefined)
+        pushManualStep(result.petriNet, result.success ? transitionId : undefined)
         setStepMessage(result.success ? `Fired transition: ${transitionId}` : (result.message || 'Transition not fired'))
         setTimeout(() => setStepMessage(null), 3000)
-    }, [petriNet])
+        setTimeout(() => setHighlightedTransitionId(undefined), 1000)
+    }, [petriNet, pushManualStep])
 
     const handleRunSimulation = async (steps: number) => {
         setIsLoading(true)
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        const mockResult: SimulationResult = {
-            steps: [],
-            firingCounts: { t1: 5, t2: 3, t3: 2 },
+        await new Promise(resolve => setTimeout(resolve, 500))
+        const simSteps: SimulationStep[] = simulatePetriNet(petriNet, steps)
+        const now = Date.now()
+        const simResult: SimulationResult = {
+            steps: simSteps,
+            firingCounts: simSteps.reduce<Record<string, number>>((acc, s) => {
+                if (s.firedTransition) acc[s.firedTransition] = (acc[s.firedTransition] || 0) + 1
+                return acc
+            }, {}),
             boundedness: '1-Bounded',
             totalSteps: steps
         }
-        setSimulationResult(mockResult)
+        setSimulationResult(simResult)
+        const startMarkings: Record<string, number> = petriNet.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>)
+        setTraces(prev => [{
+            id: `sim-${now}`,
+            label: `Run ${new Date(now).toLocaleTimeString()}`,
+            steps: simSteps,
+            source: 'simulation',
+            createdAt: new Date(now).toISOString(),
+            startMarkings,
+        }, ...prev])
         setIsLoading(false)
     }
 
@@ -75,6 +122,8 @@ const SimulatorPage: React.FC = () => {
         setPetriNet(resetNet)
         setCurrentFileName('default_petri_net.pnml')
         setSelected(null)
+        setTraces([])
+        setHighlightedTransitionId(undefined)
     }
 
     const handleSelectElement = useCallback((sel: { type: 'place' | 'transition'; id: string }) => {
@@ -199,6 +248,21 @@ const SimulatorPage: React.FC = () => {
         }
     }, [petriNet])
 
+    const handleTraceApply = useCallback((net: PetriNet, step?: SimulationStep) => {
+        setPetriNet(net)
+        if (step?.firedTransition) {
+            // try match by id or name
+            const t = net.transitions.find(tt => tt.id === step.firedTransition || tt.name === step.firedTransition)
+            if (t) {
+                if (!t.enabled) {
+                    setStepMessage(`Warning: Transition ${step.firedTransition} is not enabled at this step`)
+                }
+                setHighlightedTransitionId(t.id)
+                setTimeout(() => setHighlightedTransitionId(undefined), 1000)
+            }
+        }
+    }, [])
+
     return (
         <div className="flex flex-col lg:flex-row gap-8 h-full">
             <SimulationControls
@@ -298,11 +362,19 @@ const SimulatorPage: React.FC = () => {
                     )}
                 </div>
 
-                <PetriNetVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} onSelectElement={handleSelectElement} />
+                <PetriNetVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} onSelectElement={handleSelectElement} highlightedTransitionId={highlightedTransitionId} />
 
                 {simulationResult && (
                     <SimulationResults result={simulationResult} />
                 )}
+
+                <TraceViewer
+                    petriNet={petriNet}
+                    traces={traces}
+                    onApplyStep={(updated, step) => handleTraceApply(updated, step)}
+                    onWarn={(msg) => setStepMessage(msg)}
+                    title="Executions"
+                />
             </section>
         </div>
     )

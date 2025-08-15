@@ -89,3 +89,19 @@ export interface EventLog {
     traces: Trace[]
     totalEvents: number
 }
+
+/**
+ * Generic execution trace that can be replayed in the UI.
+ * - source 'manual' for interactive simulation,
+ * - 'simulation' for automated runs,
+ * - 'conformance' for uploaded event log cases.
+ */
+export interface ExecutionTrace {
+    id: string
+    label: string
+    steps: SimulationStep[]
+    source: 'manual' | 'simulation' | 'conformance'
+    createdAt: string
+    /** initial markings used to start the replay */
+    startMarkings?: Record<string, number>
+}

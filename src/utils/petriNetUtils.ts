@@ -282,3 +282,18 @@ export const exportToXES = (simulationSteps: SimulationStep[]): string => {
 
     return xesContent
 }
+
+/**
+ * Applies the provided markings to the given Petri net and updates transition states.
+ * Useful for replaying traces where each step provides a marking snapshot.
+ */
+export const applyMarkingsToNet = (
+    petriNet: PetriNet,
+    markings: Record<string, number>
+): PetriNet => {
+    const newPlaces: Place[] = petriNet.places.map((p) => ({
+        ...p,
+        tokens: Math.max(0, markings[p.id] ?? p.tokens),
+    }))
+    return updateTransitionStates({ ...petriNet, places: newPlaces })
+}

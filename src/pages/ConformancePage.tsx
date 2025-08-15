@@ -1,26 +1,52 @@
 import ConformanceControls from '@/components/ConformanceControls'
 import ConformanceResults from '@/components/ConformanceResults'
 import PetriNetVisualization from '@/components/PetriNetVisualization'
-import { ConformanceResult, EventLog, FileUploadResult, PetriNet } from '@/types'
-import { createDefaultPetriNet } from '@/utils/petriNetUtils'
-import { useCallback, useState } from 'react'
+import TraceViewer from '@/components/TraceViewer'
+import { ConformanceResult, EventLog, ExecutionTrace, FileUploadResult, PetriNet, SimulationStep } from '@/types'
+import { createDefaultPetriNet, updateTransitionStates } from '@/utils/petriNetUtils'
+import { useCallback, useMemo, useState } from 'react'
 
 const ConformancePage: React.FC = () => {
-    const [petriNet, setPetriNet] = useState<PetriNet>(() => createDefaultPetriNet())
+    const [petriNet, setPetriNet] = useState<PetriNet>(() => updateTransitionStates(createDefaultPetriNet()))
     const [currentFileName, setCurrentFileName] = useState<string>('default_petri_net.pnml')
     const [currentXesFileName, setCurrentXesFileName] = useState<string>()
     const [eventLog, setEventLog] = useState<EventLog | null>(null)
     const [conformanceResult, setConformanceResult] = useState<ConformanceResult | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
+    const [message, setMessage] = useState<string | null>(null)
+    const [highlightedTransitionId, setHighlightedTransitionId] = useState<string | undefined>(undefined)
+
+    const traces: ExecutionTrace[] = useMemo(() => {
+        if (!eventLog) return []
+        const startMarkings: Record<string, number> = petriNet.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>)
+        return eventLog.traces.map((tr) => {
+            const steps: SimulationStep[] = tr.events.map((ev, idx) => ({
+                step: idx + 1,
+                // markings are derived during replay; not needed here
+                markings: {},
+                firedTransition: ev.activity,
+                timestamp: ev.timestamp,
+            }))
+            return {
+                id: `case-${tr.id}`,
+                label: `Case ${tr.id}`,
+                steps,
+                source: 'conformance',
+                createdAt: new Date().toISOString(),
+                startMarkings,
+            }
+        })
+    }, [eventLog, petriNet])
 
     const handleFileUpload = useCallback((result: FileUploadResult) => {
         if (result.success && result.data) {
-            setPetriNet(result.data)
+            setPetriNet(updateTransitionStates(result.data))
             setCurrentFileName(result.filename)
             setUploadError(null)
-            // Reset conformance results when a new file is loaded
             setConformanceResult(null)
+            setMessage(null)
+            setHighlightedTransitionId(undefined)
         } else {
             setUploadError(result.error || 'Unknown error occurred')
             console.error('File upload failed:', result.error)
@@ -29,12 +55,12 @@ const ConformancePage: React.FC = () => {
 
     const handleXesFileUpload = useCallback((result: FileUploadResult) => {
         if (result.success) {
-            // result.data will be EventLog (for CSV or XES)
             setCurrentXesFileName(result.filename)
             setEventLog((result as any).data ?? null)
             setUploadError(null)
-            // Reset conformance results when a new event log file is loaded
             setConformanceResult(null)
+            setMessage(null)
+            setHighlightedTransitionId(undefined)
         } else {
             setUploadError(result.error || 'Unknown event log file error occurred')
             console.error('Event log file upload failed:', result.error)
@@ -43,25 +69,17 @@ const ConformancePage: React.FC = () => {
 
     const handleRunAnalysis = async () => {
         setIsLoading(true)
-
-        // TODO: Use `eventLog` with `petriNet` in real conformance analysis
-
-        // Simulate async operation
         await new Promise(resolve => setTimeout(resolve, 1500))
-
-        // Derive simple stats from uploaded eventLog if provided
         const stats = (() => {
             if (eventLog) {
                 return {
                     traces: eventLog.traces.length,
                     totalEvents: eventLog.totalEvents,
-                    avgDuration: '-' // placeholder
+                    avgDuration: '-'
                 }
             }
             return { traces: 0, totalEvents: 0, avgDuration: '-' }
         })()
-
-        // Mock conformance result
         const mockResult: ConformanceResult = {
             fitnessScore: 87.5,
             deviations: [
@@ -83,6 +101,22 @@ const ConformancePage: React.FC = () => {
         setConformanceResult(mockResult)
         setIsLoading(false)
     }
+
+    const handleTraceApply = useCallback((net: PetriNet, step?: SimulationStep) => {
+        setPetriNet(net)
+        if (step?.firedTransition) {
+            const t = net.transitions.find(tt => tt.id === step.firedTransition || tt.name === step.firedTransition)
+            if (t) {
+                if (!t.enabled) {
+                    setMessage(`Warning: Transition ${step.firedTransition} is not enabled at this step`)
+                } else {
+                    setMessage(null)
+                }
+                setHighlightedTransitionId(t.id)
+                setTimeout(() => setHighlightedTransitionId(undefined), 1000)
+            }
+        }
+    }, [])
 
     return (
         <div className="flex flex-col lg:flex-row gap-8 h-full">
@@ -129,10 +163,28 @@ const ConformancePage: React.FC = () => {
                     </div>
                 )}
 
-                <PetriNetVisualization mode="conformance" petriNet={petriNet} />
+                {/* Warning/Info Message */}
+                {message && (
+                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800">
+                        {message}
+                    </div>
+                )}
+
+                <PetriNetVisualization mode="conformance" petriNet={petriNet} highlightedTransitionId={highlightedTransitionId} />
 
                 {conformanceResult && (
                     <ConformanceResults result={conformanceResult} />
+                )}
+
+                {/* Trace viewer for event log cases */}
+                {traces.length > 0 && (
+                    <TraceViewer
+                        petriNet={petriNet}
+                        traces={traces}
+                        onApplyStep={(updated, step) => handleTraceApply(updated, step)}
+                        onWarn={(msg) => setMessage(msg)}
+                        title="Cases"
+                    />
                 )}
             </section>
         </div>
