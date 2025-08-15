@@ -3,6 +3,7 @@ import SimulationControls from '@/components/SimulationControls'
 import SimulationResults from '@/components/SimulationResults'
 import TraceViewer from '@/components/TraceViewer'
 import { ExecutionTrace, FileUploadResult, PetriNet, SimulationResult, SimulationStep } from '@/types'
+import { stepsToXES, traceToCSV } from '@/utils/exportUtils'
 import { createDefaultPetriNet, fireTransition, simulatePetriNet, stepOnce, updateTransitionStates } from '@/utils/petriNetUtils'
 import { Copy } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
@@ -248,6 +249,30 @@ const SimulatorPage: React.FC = () => {
         }
     }, [petriNet])
 
+    // Helper to copy arbitrary text (used by exports)
+    const copyToClipboard = useCallback(async (text: string, successMsg?: string) => {
+        try {
+            if (navigator && 'clipboard' in navigator && (navigator as any).clipboard?.writeText) {
+                await (navigator as any).clipboard.writeText(text)
+            } else {
+                const textarea = document.createElement('textarea')
+                textarea.value = text
+                textarea.style.position = 'fixed'
+                textarea.style.left = '-9999px'
+                document.body.appendChild(textarea)
+                textarea.focus()
+                textarea.select()
+                document.execCommand('copy')
+                document.body.removeChild(textarea)
+            }
+            setStepMessage(successMsg || 'Copied to clipboard')
+        } catch (e) {
+            setStepMessage('Copy failed')
+        } finally {
+            setTimeout(() => setStepMessage(null), 3000)
+        }
+    }, [])
+
     const handleTraceApply = useCallback((net: PetriNet, step?: SimulationStep) => {
         setPetriNet(net)
         if (step?.firedTransition) {
@@ -262,6 +287,17 @@ const SimulatorPage: React.FC = () => {
             }
         }
     }, [])
+
+    // Removed file download in favor of clipboard copy
+    const handleExportXES = useCallback(async (trace: ExecutionTrace) => {
+        const xes = stepsToXES(trace.steps, trace.id)
+        await copyToClipboard(xes, 'XES copied to clipboard')
+    }, [copyToClipboard])
+
+    const handleExportCSV = useCallback(async (trace: ExecutionTrace) => {
+        const csv = traceToCSV(trace)
+        await copyToClipboard(csv, 'CSV copied to clipboard')
+    }, [copyToClipboard])
 
     return (
         <div className="flex flex-col lg:flex-row gap-8 h-full">
@@ -374,6 +410,8 @@ const SimulatorPage: React.FC = () => {
                     onApplyStep={(updated, step) => handleTraceApply(updated, step)}
                     onWarn={(msg) => setStepMessage(msg)}
                     title="Executions"
+                    onExportXES={handleExportXES}
+                    onExportCSV={handleExportCSV}
                 />
             </section>
         </div>

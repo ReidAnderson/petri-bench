@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useState } from 'react'
 import { ExecutionTrace, PetriNet, SimulationStep } from '@/types'
 import { fireTransition, updateTransitionStates } from '@/utils/petriNetUtils'
+import React, { useCallback, useMemo, useState } from 'react'
 
 interface TraceViewerProps {
     petriNet: PetriNet
@@ -8,6 +8,8 @@ interface TraceViewerProps {
     onApplyStep?: (updatedNet: PetriNet, step: SimulationStep, index: number) => void
     onWarn?: (message: string) => void
     title?: string
+    onExportXES?: (trace: ExecutionTrace) => void
+    onExportCSV?: (trace: ExecutionTrace) => void
 }
 
 const cloneNet = (net: PetriNet): PetriNet => ({
@@ -23,7 +25,7 @@ const applyStartMarkings = (net: PetriNet, marks?: Record<string, number>): Petr
     return updateTransitionStates(next)
 }
 
-const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep, onWarn, title = 'Traces' }) => {
+const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep, onWarn, title = 'Traces', onExportXES, onExportCSV }) => {
     const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null)
     const [cursor, setCursor] = useState<number>(0)
 
@@ -87,11 +89,29 @@ const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep
         <div className="mt-4 p-4 bg-white rounded-lg shadow-lg">
             <div className="flex items-center justify-between border-b pb-2 mb-3">
                 <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
-                {selectedTrace && (
-                    <span className="text-xs text-slate-500">
-                        Steps: {steps.length}
-                    </span>
-                )}
+                <div className="flex items-center gap-2">
+                    {selectedTrace && (
+                        <>
+                            {onExportCSV && (
+                                <button
+                                    className="px-2 py-1 text-xs border rounded hover:bg-slate-50"
+                                    onClick={() => onExportCSV(selectedTrace)}
+                                    title="Export CSV"
+                                >CSV</button>
+                            )}
+                            {onExportXES && (
+                                <button
+                                    className="px-2 py-1 text-xs border rounded hover:bg-slate-50"
+                                    onClick={() => onExportXES(selectedTrace)}
+                                    title="Export XES"
+                                >XES</button>
+                            )}
+                            <span className="text-xs text-slate-500">
+                                Steps: {steps.length}
+                            </span>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Trace list */}

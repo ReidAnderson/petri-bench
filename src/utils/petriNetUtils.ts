@@ -192,32 +192,31 @@ export const simulatePetriNet = (
     steps: number
 ): SimulationStep[] => {
     const result: SimulationStep[] = []
-    const markings = petriNet.places.reduce((acc, place) => {
-        acc[place.id] = place.tokens
-        return acc
-    }, {} as Record<string, number>)
+    let curPetriNet = petriNet;
 
     for (let i = 0; i <= steps; i++) {
+        // get all enabled transitions
+        const enabledTransitions = getEnabledTransitions(curPetriNet)
+
+        if (enabledTransitions.length === 0) {
+            break;
+        }
+
+        // pick a random enabled transition to fire
+        const randomTransition = enabledTransitions[Math.floor(Math.random() * enabledTransitions.length)]
+        const fireResult = fireTransition(curPetriNet, randomTransition)
+        curPetriNet = fireResult.petriNet;
+        const markings = curPetriNet.places.reduce((acc, place) => {
+            acc[place.id] = place.tokens
+            return acc
+        }, {} as Record<string, number>)
+
         result.push({
             step: i,
             markings: { ...markings },
             timestamp: new Date(Date.now() + i * 1000).toISOString(),
+            firedTransition: fireResult.success ? randomTransition : undefined
         })
-
-        // Simple simulation logic - fire enabled transitions
-        if (markings.p1 > 0) {
-            markings.p1--
-            markings.p2++
-            result[result.length - 1].firedTransition = 't1'
-        } else if (markings.p2 > 0) {
-            markings.p2--
-            markings.p3++
-            result[result.length - 1].firedTransition = 't2'
-        } else if (markings.p3 > 0) {
-            markings.p3--
-            markings.p1++
-            result[result.length - 1].firedTransition = 't3'
-        }
     }
 
     return result
