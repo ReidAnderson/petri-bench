@@ -2,8 +2,8 @@ import ConformanceControls from '@/components/ConformanceControls'
 import ConformanceResults from '@/components/ConformanceResults'
 import PetriNetVisualization from '@/components/PetriNetVisualization'
 import TraceViewer from '@/components/TraceViewer'
-import { ConformanceResult, EventLog, ExecutionTrace, FileUploadResult, PetriNet, SimulationStep } from '@/types'
-import { createDefaultPetriNet, updateTransitionStates } from '@/utils/petriNetUtils'
+import { ConformanceResult, Deviation, EventLog, ExecutionTrace, FileUploadResult, PetriNet, SimulationStep } from '@/types'
+import { createDefaultPetriNet, fireTransition, updateTransitionStates } from '@/utils/petriNetUtils'
 import { useCallback, useMemo, useState } from 'react'
 
 const ConformancePage: React.FC = () => {
@@ -16,6 +16,9 @@ const ConformancePage: React.FC = () => {
     const [uploadError, setUploadError] = useState<string | null>(null)
     const [message, setMessage] = useState<string | null>(null)
     const [highlightedTransitionId, setHighlightedTransitionId] = useState<string | undefined>(undefined)
+    // New: per-trace deviations and current selection
+    const [perTraceDeviations, setPerTraceDeviations] = useState<Record<string, Deviation[]>>({})
+    const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null)
 
     const traces: ExecutionTrace[] = useMemo(() => {
         if (!eventLog) return []
@@ -47,6 +50,8 @@ const ConformancePage: React.FC = () => {
             setConformanceResult(null)
             setMessage(null)
             setHighlightedTransitionId(undefined)
+            setPerTraceDeviations({})
+            setSelectedTraceId(null)
         } else {
             setUploadError(result.error || 'Unknown error occurred')
             console.error('File upload failed:', result.error)
@@ -61,44 +66,107 @@ const ConformancePage: React.FC = () => {
             setConformanceResult(null)
             setMessage(null)
             setHighlightedTransitionId(undefined)
+            setPerTraceDeviations({})
+            setSelectedTraceId(null)
         } else {
             setUploadError(result.error || 'Unknown event log file error occurred')
             console.error('Event log file upload failed:', result.error)
         }
     }, [])
 
+    // Helper: build a net from start markings
+    const applyStartMarkings = useCallback((net: PetriNet, marks?: Record<string, number>): PetriNet => {
+        if (!marks) return updateTransitionStates(net)
+        const next: PetriNet = {
+            places: net.places.map(p => ({ ...p, tokens: Math.max(0, marks[p.id] ?? p.tokens) })),
+            transitions: net.transitions.map(t => ({ ...t })),
+            arcs: net.arcs.map(a => ({ ...a })),
+        }
+        return updateTransitionStates(next)
+    }, [])
+
     const handleRunAnalysis = async () => {
         setIsLoading(true)
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        await new Promise(resolve => setTimeout(resolve, 300))
+
+        // Compute per-trace deviations by replaying events on the model
+        const deviationsMap: Record<string, Deviation[]> = {}
+        let totalEventSteps = 0
+        let enabledMatches = 0
+
+        for (const trace of traces) {
+            let net: PetriNet = applyStartMarkings({
+                places: petriNet.places.map(p => ({ ...p })),
+                transitions: petriNet.transitions.map(t => ({ ...t })),
+                arcs: petriNet.arcs.map(a => ({ ...a })),
+            }, trace.startMarkings)
+
+            const devs: Deviation[] = []
+            for (let i = 0; i < trace.steps.length; i++) {
+                const s = trace.steps[i]
+                if (!s.firedTransition) {
+                    // No-op step
+                    net = updateTransitionStates(net)
+                    continue
+                }
+                totalEventSteps++
+                // Find by id or name
+                const trans = net.transitions.find(t => t.id === s.firedTransition || t.name === s.firedTransition)
+                if (!trans) {
+                    // Extra behavior: event not found in model
+                    devs.push({
+                        type: 'extra',
+                        description: `Step #${s.step}: Event '${s.firedTransition}' not found in model`,
+                        severity: 'low',
+                    })
+                    net = updateTransitionStates(net)
+                } else if (trans.enabled) {
+                    const res = fireTransition(net, trans.id)
+                    net = res.petriNet
+                    enabledMatches++
+                } else {
+                    // Record deviation when event exists but is not enabled
+                    devs.push({
+                        type: 'deviation',
+                        description: `Step #${s.step}: Transition '${s.firedTransition}' was executed when not enabled`,
+                        transitionId: trans.id,
+                        severity: 'high',
+                    })
+                    // keep net state but update enabled flags
+                    net = updateTransitionStates(net)
+                }
+            }
+            deviationsMap[trace.id] = devs
+        }
+
+        setPerTraceDeviations(deviationsMap)
+
         const stats = (() => {
             if (eventLog) {
                 return {
                     traces: eventLog.traces.length,
                     totalEvents: eventLog.totalEvents,
-                    avgDuration: '-'
+                    avgDuration: '-',
                 }
             }
             return { traces: 0, totalEvents: 0, avgDuration: '-' }
         })()
-        const mockResult: ConformanceResult = {
-            fitnessScore: 87.5,
-            deviations: [
-                {
-                    type: 'deviation',
-                    description: "Transition 'T3' was executed 4 times without 'P3' being marked.",
-                    transitionId: 't3',
-                    severity: 'high'
-                },
-                {
-                    type: 'missing',
-                    description: 'Path from T3 to P1 was never taken in the log.',
-                    severity: 'medium'
-                }
-            ],
-            eventLogStats: stats
+
+        // Aggregate deviations for summary view
+        const aggregated: Deviation[] = Object.entries(deviationsMap).flatMap(([traceId, devs]) => {
+            const label = traces.find(t => t.id === traceId)?.label || traceId
+            return devs.map(d => ({ ...d, description: `${label}: ${d.description}` }))
+        })
+
+        const fitnessScore = totalEventSteps === 0 ? 0 : Math.round((enabledMatches / totalEventSteps) * 1000) / 10
+
+        const result: ConformanceResult = {
+            fitnessScore,
+            deviations: aggregated,
+            eventLogStats: stats,
         }
 
-        setConformanceResult(mockResult)
+        setConformanceResult(result)
         setIsLoading(false)
     }
 
@@ -178,13 +246,38 @@ const ConformancePage: React.FC = () => {
 
                 {/* Trace viewer for event log cases */}
                 {traces.length > 0 && (
-                    <TraceViewer
-                        petriNet={petriNet}
-                        traces={traces}
-                        onApplyStep={(updated, step) => handleTraceApply(updated, step)}
-                        onWarn={(msg) => setMessage(msg)}
-                        title="Cases"
-                    />
+                    <>
+                        <TraceViewer
+                            petriNet={petriNet}
+                            traces={traces}
+                            onApplyStep={(updated, step) => handleTraceApply(updated, step)}
+                            onWarn={(msg) => setMessage(msg)}
+                            title="Cases"
+                            onSelectTrace={(t) => setSelectedTraceId(t.id)}
+                            deviationsByTrace={Object.fromEntries(Object.entries(perTraceDeviations).map(([k, v]) => [k, v.length]))}
+                        />
+
+                        {/* Selected trace deviations */}
+                        {selectedTraceId && perTraceDeviations[selectedTraceId] && (
+                            <div className="bg-white p-4 rounded-lg shadow mt-4">
+                                <h3 className="font-semibold mb-2 text-slate-800">Deviations for {traces.find(t => t.id === selectedTraceId)?.label}</h3>
+                                {perTraceDeviations[selectedTraceId].length === 0 ? (
+                                    <p className="text-sm text-slate-500">No deviations found.</p>
+                                ) : (
+                                    <ul className="text-sm space-y-2">
+                                        {perTraceDeviations[selectedTraceId].map((d, idx) => (
+                                            <li key={idx} className="flex items-start gap-2">
+                                                <span className={`font-mono text-xs px-1.5 py-0.5 rounded-md mt-0.5 ${d.type === 'deviation' ? 'bg-red-100 text-red-800' : d.type === 'missing' ? 'bg-slate-100 text-slate-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                    {d.type.toUpperCase()}
+                                                </span>
+                                                <span>{d.description}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        )}
+                    </>
                 )}
             </section>
         </div>

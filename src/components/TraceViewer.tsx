@@ -10,6 +10,10 @@ interface TraceViewerProps {
     title?: string
     onExportXES?: (trace: ExecutionTrace) => void
     onExportCSV?: (trace: ExecutionTrace) => void
+    // New: notify parent when a trace is selected
+    onSelectTrace?: (trace: ExecutionTrace) => void
+    // New: per-trace deviation counts (trace.id => count)
+    deviationsByTrace?: Record<string, number>
 }
 
 const cloneNet = (net: PetriNet): PetriNet => ({
@@ -25,7 +29,7 @@ const applyStartMarkings = (net: PetriNet, marks?: Record<string, number>): Petr
     return updateTransitionStates(next)
 }
 
-const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep, onWarn, title = 'Traces', onExportXES, onExportCSV }) => {
+const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep, onWarn, title = 'Traces', onExportXES, onExportCSV, onSelectTrace, deviationsByTrace }) => {
     const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null)
     const [cursor, setCursor] = useState<number>(0)
 
@@ -79,8 +83,11 @@ const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep
         if (trace && trace.steps.length > 0) {
             const updated = buildNetUpTo(0)
             onApplyStep?.(updated, trace.steps[0], 0)
+            onSelectTrace?.(trace)
+        } else if (trace) {
+            onSelectTrace?.(trace)
         }
-    }, [traces, buildNetUpTo, onApplyStep])
+    }, [traces, buildNetUpTo, onApplyStep, onSelectTrace])
 
     const handlePrev = useCallback(() => applyCursor(cursor - 1), [applyCursor, cursor])
     const handleNext = useCallback(() => applyCursor(cursor + 1), [applyCursor, cursor])
@@ -119,16 +126,28 @@ const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep
                 {traces.length === 0 && (
                     <span className="text-xs text-slate-400">No executions yet</span>
                 )}
-                {traces.map(t => (
-                    <button
-                        key={t.id}
-                        onClick={() => handleSelectTrace(t.id)}
-                        className={`px-2.5 py-1 rounded-full text-xs border ${selectedTraceId === t.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'}`}
-                        title={`${t.label} (${t.steps.length} steps)`}
-                    >
-                        {t.label}
-                    </button>
-                ))}
+                {traces.map(t => {
+                    const selected = selectedTraceId === t.id
+                    const count = deviationsByTrace?.[t.id] ?? 0
+                    return (
+                        <button
+                            key={t.id}
+                            onClick={() => handleSelectTrace(t.id)}
+                            className={`px-2.5 py-1 rounded-full text-xs border inline-flex items-center gap-1.5 ${selected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'}`}
+                            title={`${t.label} (${t.steps.length} steps)`}
+                        >
+                            <span>{t.label}</span>
+                            {count > 0 && (
+                                <span
+                                    className={`ml-1 px-1.5 py-0.5 rounded-full border text-[10px] font-semibold ${selected ? 'bg-white/15 text-white border-white/30' : 'bg-red-50 text-red-700 border-red-200'}`}
+                                    title={`${count} deviations`}
+                                >
+                                    {count}
+                                </span>
+                            )}
+                        </button>
+                    )
+                })}
             </div>
 
             {/* Stepper */}
