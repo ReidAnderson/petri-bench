@@ -19,10 +19,14 @@ const ConformancePage: React.FC = () => {
     // New: per-trace deviations and current selection
     const [perTraceDeviations, setPerTraceDeviations] = useState<Record<string, Deviation[]>>({})
     const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null)
+    // New: track initial markings to support resetting
+    const [initialMarkings, setInitialMarkings] = useState<Record<string, number>>(() => {
+        const net = updateTransitionStates(createDefaultPetriNet())
+        return net.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>)
+    })
 
     const traces: ExecutionTrace[] = useMemo(() => {
         if (!eventLog) return []
-        const startMarkings: Record<string, number> = petriNet.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>)
         return eventLog.traces.map((tr) => {
             const steps: SimulationStep[] = tr.events.map((ev, idx) => ({
                 step: idx + 1,
@@ -37,14 +41,17 @@ const ConformancePage: React.FC = () => {
                 steps,
                 source: 'conformance',
                 createdAt: new Date().toISOString(),
-                startMarkings,
+                // Use the captured initial markings from when the model was loaded
+                startMarkings: { ...initialMarkings },
             }
         })
-    }, [eventLog, petriNet])
+    }, [eventLog, initialMarkings])
 
     const handleFileUpload = useCallback((result: FileUploadResult) => {
         if (result.success && result.data) {
-            setPetriNet(updateTransitionStates(result.data))
+            const updated = updateTransitionStates(result.data)
+            setPetriNet(updated)
+            setInitialMarkings(updated.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>))
             setCurrentFileName(result.filename)
             setUploadError(null)
             setConformanceResult(null)
@@ -186,6 +193,24 @@ const ConformancePage: React.FC = () => {
         }
     }, [])
 
+    // New: reset tokens to the initial markings captured on load/upload
+    const handleResetMarking = useCallback(() => {
+        setPetriNet(prev => {
+            const next = {
+                ...prev,
+                places: prev.places.map(p => {
+                    const init = initialMarkings[p.id] ?? 0
+                    const max = p.maxTokens
+                    const tokens = max !== undefined ? Math.min(init, max) : init
+                    return { ...p, tokens }
+                })
+            }
+            return updateTransitionStates(next)
+        })
+        setHighlightedTransitionId(undefined)
+        setMessage(null)
+    }, [initialMarkings])
+
     return (
         <div className="flex flex-col lg:flex-row gap-8 h-full">
             <ConformanceControls
@@ -238,7 +263,7 @@ const ConformancePage: React.FC = () => {
                     </div>
                 )}
 
-                <PetriNetVisualization mode="conformance" petriNet={petriNet} highlightedTransitionId={highlightedTransitionId} />
+                <PetriNetVisualization mode="conformance" petriNet={petriNet} highlightedTransitionId={highlightedTransitionId} onResetMarking={handleResetMarking} />
 
                 {conformanceResult && (
                     <ConformanceResults result={conformanceResult} />
@@ -255,6 +280,7 @@ const ConformancePage: React.FC = () => {
                             title="Cases"
                             onSelectTrace={(t) => setSelectedTraceId(t.id)}
                             deviationsByTrace={Object.fromEntries(Object.entries(perTraceDeviations).map(([k, v]) => [k, v.length]))}
+                            onResetMarking={handleResetMarking}
                         />
 
                         {/* Selected trace deviations */}

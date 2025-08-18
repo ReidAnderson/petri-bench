@@ -181,7 +181,7 @@ const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep
                         {steps.map((s, idx) => (
                             <li key={idx}>
                                 <button
-                                    onClick={() => applyCursor(idx)}
+                                    onClick={() => { applyCursor(idx); }}
                                     className={`w-full text-left px-2 py-1 rounded ${idx === cursor ? 'bg-blue-50 text-blue-800' : 'hover:bg-slate-50'}`}
                                 >
                                     <span className="font-mono">#{s.step}</span>

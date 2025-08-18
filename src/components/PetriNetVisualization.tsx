@@ -10,9 +10,11 @@ interface PetriNetVisualizationProps {
     onFireTransition?: (transitionId: string) => void,
     onSelectElement?: (sel: { type: 'place' | 'transition'; id: string }) => void,
     highlightedTransitionId?: string,
+    // New: allow parent to reset marking
+    onResetMarking?: () => void,
 }
 
-const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition, onSelectElement, highlightedTransitionId }) => {
+const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition, onSelectElement, highlightedTransitionId, onResetMarking }) => {
     // Compute layout using d3-force when petriNet changes
     const layout = useMemo(() => {
         if (!petriNet) return null;
@@ -276,6 +278,16 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                                 >
                                     <RotateCcw size={18} />
                                 </button>
+                                {/* New: Reset marking */}
+                                {onResetMarking && (
+                                    <button
+                                        onClick={() => onResetMarking()}
+                                        className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors"
+                                        title="Reset Marking to Initial"
+                                    >
+                                        <RotateCcw size={18} />
+                                    </button>
+                                )}
                             </div>
 
                             <TransformComponent

@@ -19,6 +19,11 @@ const SimulatorPage: React.FC = () => {
     const [copyMsg, setCopyMsg] = useState<string | null>(null)
     const [traces, setTraces] = useState<ExecutionTrace[]>([])
     const [highlightedTransitionId, setHighlightedTransitionId] = useState<string | undefined>(undefined)
+    // New: store initial markings to allow resetting
+    const [initialMarkings, setInitialMarkings] = useState<Record<string, number>>(() => {
+        const net = updateTransitionStates(createDefaultPetriNet())
+        return net.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>)
+    })
 
     const selectedPlace = useMemo(() => selected?.type === 'place' ? petriNet.places.find(p => p.id === selected.id) ?? null : null, [selected, petriNet])
     const selectedTransition = useMemo(() => selected?.type === 'transition' ? petriNet.transitions.find(t => t.id === selected.id) ?? null : null, [selected, petriNet])
@@ -27,6 +32,7 @@ const SimulatorPage: React.FC = () => {
         if (result.success && result.data) {
             const updatedNet = updateTransitionStates(result.data)
             setPetriNet(updatedNet)
+            setInitialMarkings(updatedNet.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>))
             setCurrentFileName(result.filename)
             setUploadError(null)
             setStepMessage(null)
@@ -121,6 +127,7 @@ const SimulatorPage: React.FC = () => {
         setStepMessage(null)
         const resetNet = updateTransitionStates(createDefaultPetriNet())
         setPetriNet(resetNet)
+        setInitialMarkings(resetNet.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>))
         setCurrentFileName('default_petri_net.pnml')
         setSelected(null)
         setTraces([])
@@ -179,6 +186,15 @@ const SimulatorPage: React.FC = () => {
             // Keep selection in sync
             if (willRename && newId !== oldId && requestedId && !isTaken(requestedId)) {
                 setSelected(sel => sel && sel.type === 'place' && sel.id === oldId ? { type: 'place', id: newId } : sel)
+                // New: also update initial markings key
+                setInitialMarkings(prevMarks => {
+                    const marks = { ...prevMarks }
+                    if (Object.prototype.hasOwnProperty.call(marks, oldId)) {
+                        marks[newId] = marks[oldId]
+                        delete marks[oldId]
+                    }
+                    return marks
+                })
             }
 
             return updated
@@ -299,6 +315,23 @@ const SimulatorPage: React.FC = () => {
         await copyToClipboard(csv, 'CSV copied to clipboard')
     }, [copyToClipboard])
 
+    // New: reset tokens to initial markings
+    const handleResetMarking = useCallback(() => {
+        setPetriNet(prev => {
+            const next = {
+                ...prev,
+                places: prev.places.map(p => {
+                    const init = initialMarkings[p.id] ?? 0
+                    const max = p.maxTokens
+                    const tokens = max !== undefined ? Math.min(init, max) : init
+                    return { ...p, tokens }
+                })
+            }
+            return updateTransitionStates(next)
+        })
+        setHighlightedTransitionId(undefined)
+    }, [initialMarkings])
+
     return (
         <div className="flex flex-col lg:flex-row gap-8 h-full">
             <SimulationControls
@@ -398,7 +431,7 @@ const SimulatorPage: React.FC = () => {
                     )}
                 </div>
 
-                <PetriNetVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} onSelectElement={handleSelectElement} highlightedTransitionId={highlightedTransitionId} />
+                <PetriNetVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} onSelectElement={handleSelectElement} highlightedTransitionId={highlightedTransitionId} onResetMarking={handleResetMarking} />
 
                 {simulationResult && (
                     <SimulationResults result={simulationResult} />
@@ -412,6 +445,7 @@ const SimulatorPage: React.FC = () => {
                     title="Executions"
                     onExportXES={handleExportXES}
                     onExportCSV={handleExportCSV}
+                    onResetMarking={handleResetMarking}
                 />
             </section>
         </div>
