@@ -4,6 +4,7 @@
     "version": "0.0.1",
     "type": "module",
     "description": "Collection of tools for quickly generating, analyzing, and exporting petri nets for process analysis",
+    "homepage": "https://ReidAnderson.github.io/petri-bench",
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
