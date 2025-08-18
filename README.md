@@ -2,17 +2,6 @@
 
 Collection of tools for quickly generating, analyzing, and exporting petri nets for process analysis.
 
-## 🚀 Modern Stack
-
-- **React 18** with TypeScript for type-safe UI development
-- **Vite** for lightning-fast development and builds
-- **Tailwind CSS** for utility-first styling
-- **React Router** for client-side routing
-- **Chart.js** for data visualizations
-- **Vitest** for unit testing
-- **Playwright** for end-to-end testing
-- **ESLint & Prettier** for code quality and formatting
-
 ## 📋 Features
 
 ### Petri Net Simulator
@@ -86,81 +75,6 @@ Notes:
 
 4. Open your browser and visit `http://localhost:3000`
 
-## 📜 Available Scripts
-
-### Development
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build locally
-
-### Code Quality
-- `npm run lint` - Run ESLint to check for code issues
-- `npm run lint:fix` - Automatically fix ESLint issues
-- `npm run format` - Format code with Prettier
-- `npm run format:check` - Check if code is properly formatted
-- `npm run type-check` - Run TypeScript type checking
-
-### Testing
-- `npm run test` - Run unit tests in watch mode
-- `npm run test:run` - Run unit tests once
-- `npm run test:ui` - Open Vitest UI for interactive testing
-- `npm run test:coverage` - Generate test coverage report
-- `npm run test:e2e` - Run Playwright end-to-end tests
-- `npm run test:e2e:ui` - Run E2E tests with Playwright UI
-- `npm run test:e2e:headed` - Run E2E tests in headed mode
-- `npm run test:e2e:debug` - Debug E2E tests
-
-## 📁 Project Structure
-
-```
-src/
-├── components/          # Reusable React components
-│   ├── Header.tsx
-│   ├── PetriNetVisualization.tsx
-│   ├── SimulationControls.tsx
-│   ├── SimulationResults.tsx
-│   ├── ConformanceControls.tsx
-│   ├── ConformanceResults.tsx
-│   └── __tests__/       # Component tests
-├── pages/               # Page components
-│   ├── SimulatorPage.tsx
-│   └── ConformancePage.tsx
-├── types/               # TypeScript type definitions
-│   └── index.ts
-├── hooks/               # Custom React hooks
-├── utils/               # Utility functions
-├── App.tsx              # Main application component
-├── main.tsx             # Application entry point
-├── index.css            # Global styles with Tailwind
-└── setupTests.ts        # Test configuration
-
-tests/                   # End-to-end tests
-├── basic.spec.ts
-└── ...
-
-public/                  # Static assets
-```
-
-## 🧪 Testing Strategy
-
-### Unit Tests
-- Components are tested using Vitest and React Testing Library
-- Focus on component behavior and user interactions
-- Run tests with `npm run test`
-
-### End-to-End Tests
-- Full application workflows tested with Playwright
-- Cross-browser testing (Chromium, Firefox, WebKit)
-- Run tests with `npm run test:e2e`
-
-## 🎨 Styling
-
-The project uses Tailwind CSS for styling with:
-- Custom color palette optimized for data visualization
-- Responsive design patterns
-- Component-specific utility classes
-- Dark mode support (can be extended)
-
 ## 📦 Building for Production
 
 1. Build the application:
@@ -174,24 +88,6 @@ The project uses Tailwind CSS for styling with:
    ```bash
    npm run preview
    ```
-
-## 🔧 Configuration
-
-### Vite Configuration
-- Path aliases for clean imports (`@/components`, `@/types`, etc.)
-- Development server on port 3000
-- Source maps enabled for debugging
-
-### TypeScript Configuration
-- Strict type checking enabled
-- Path mapping for module resolution
-- Latest ES2020 target for modern features
-
-### ESLint & Prettier
-- TypeScript-aware linting rules
-- React hooks validation
-- Consistent code formatting
-- Import sorting and organization
 
 ## 🤝 Contributing
 
@@ -207,13 +103,3 @@ The project uses Tailwind CSS for styling with:
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🚀 Future Enhancements
-
-- [ ] Real-time collaborative editing
-- [ ] Advanced Petri net editing capabilities
-- [ ] More export formats (BPMN, DOT, etc.)
-- [ ] Performance analysis tools
-- [ ] Plugin system for custom analyses
-- [ ] Dark mode theme
-- [ ] Internationalization support
