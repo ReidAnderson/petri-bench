@@ -3,8 +3,8 @@ import path from 'path'
 import { defineConfig } from 'vite'
 
 // https://vitejs.dev/config/
-export default defineConfig({
-    base: '/petri-bench/',
+export default defineConfig(({ command, mode }) => ({
+    base: command === 'build' ? '/petri-bench/' : '/',
     plugins: [react()],
     resolve: {
         alias: {
@@ -19,6 +19,7 @@ export default defineConfig({
     server: {
         port: 3000,
         open: true,
+        strictPort: true,
     },
     build: {
         outDir: 'dist',
@@ -30,4 +31,4 @@ export default defineConfig({
         setupFiles: ['./src/setupTests.ts'],
         exclude: ['**/node_modules/**', '**/tests/**'],
     },
-})
+}))

@@ -2,12 +2,12 @@ import { expect, test } from '@playwright/test'
 
 test.describe('Petri Net Suite', () => {
     test('homepage loads successfully', async ({ page }) => {
-        await page.goto('/')
+        await page.goto('/petri-bench/')
         await expect(page.locator('h1')).toContainText('Petri Net Suite')
     })
 
     test('can navigate between simulator and conformance pages', async ({ page }) => {
-        await page.goto('/')
+        await page.goto('/petri-bench/')
 
         // Check simulator tab is visible
         await expect(page.locator('text=Simulator')).toBeVisible()
@@ -28,7 +28,7 @@ test.describe('Petri Net Suite', () => {
     })
 
     test('simulation controls work', async ({ page }) => {
-        await page.goto('/')
+        await page.goto('/petri-bench/')
         await page.click('text=Simulator')
 
         // Check if run simulation button is present (be more specific)
@@ -43,7 +43,7 @@ test.describe('Petri Net Suite', () => {
     })
 
     test('conformance controls work', async ({ page }) => {
-        await page.goto('/')
+        await page.goto('/petri-bench/')
         await page.click('text=Conformance Checker')
 
         // Check if file upload areas are present

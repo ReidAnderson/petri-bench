@@ -2,7 +2,7 @@ import Header from '@/components/Header'
 import ConformancePage from '@/pages/ConformancePage'
 import SimulatorPage from '@/pages/SimulatorPage'
 import { useState } from 'react'
-import { Route, BrowserRouter as Router, Routes } from 'react-router-dom'
+import { Route, HashRouter as Router, Routes } from 'react-router-dom'
 
 function App() {
     const [currentPage, setCurrentPage] = useState<'simulator' | 'conformance'>('simulator')
