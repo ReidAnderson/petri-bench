@@ -105,3 +105,25 @@ export interface ExecutionTrace {
     /** initial markings used to start the replay */
     startMarkings?: Record<string, number>
 }
+
+export type ReplayStepStatus = 'valid' | 'invalid' | 'missing' | 'noop'
+export interface ReplayStepEntry {
+    step: number
+    status: ReplayStepStatus
+    name?: string
+    transitionId?: string
+}
+
+/**
+ * Highlights produced during trace replay up to a selected step.
+ * - valid: transitions in the model that were enabled at the moment they fired.
+ * - invalidNotEnabled: transitions in the model that were not enabled when the event occurred.
+ * - missingEvents: events whose activity name does not exist in the model.
+ * - sequence: ordered per-step classification for the narrative.
+ */
+export interface ReplayHighlights {
+    valid: string[]
+    invalidNotEnabled: string[]
+    missingEvents: Array<{ name: string; count: number }>
+    sequence: ReplayStepEntry[]
+}

@@ -12,14 +12,23 @@ interface PetriNetVisualizationProps {
     highlightedTransitionId?: string,
     // New: allow parent to reset marking
     onResetMarking?: () => void,
+    // New: conformance replay highlights
+    highlightValidIds?: string[]
+    highlightInvalidIds?: string[]
+    ghostTransitions?: Array<{ name: string; count: number }>
+    // New: ordered sequence for the narrative chips
+    replaySequence?: Array<{ step: number; status: 'valid' | 'invalid' | 'missing' | 'noop'; name?: string; transitionId?: string }>
 }
 
-const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition, onSelectElement, highlightedTransitionId, onResetMarking }) => {
+const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition, onSelectElement, highlightedTransitionId, onResetMarking, highlightValidIds = [], highlightInvalidIds = [], ghostTransitions = [], replaySequence = [] }) => {
     // Compute layout using d3-force when petriNet changes
     const layout = useMemo(() => {
         if (!petriNet) return null;
         return computeLayout(petriNet, 800, 600);
     }, [petriNet]);
+
+    const validSet = useMemo(() => new Set(highlightValidIds), [highlightValidIds])
+    const invalidSet = useMemo(() => new Set(highlightInvalidIds), [highlightInvalidIds])
 
     // List of enabled transitions for display below the visualization
     const enabledTransitions = useMemo(() => {
@@ -114,7 +123,13 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
         const y = node.y || 0;
         const width = 30;
         const height = 50;
-        const isHighlighted = highlightedTransitionId === transition.id;
+        const isPulse = highlightedTransitionId === transition.id;
+        const isValid = validSet.has(transition.id)
+        const isInvalid = invalidSet.has(transition.id)
+
+        const fill = isValid ? '#ecfdf5' : isInvalid ? '#fef2f2' : (transition.enabled ? '#f1f5f9' : '#f8fafc')
+        const stroke = isValid ? '#10b981' : isInvalid ? '#ef4444' : (transition.enabled ? '#64748b' : '#cbd5e1')
+        const strokeWidth = isValid || isInvalid || isPulse ? 3 : 2
 
         return (
             <g key={transition.id} className="transition-group" onClick={() => handleSelect('transition', transition.id)} role={mode === 'simulator' ? 'button' as any : undefined}>
@@ -124,10 +139,12 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                     y={y - height / 2}
                     width={width}
                     height={height}
-                    fill={isHighlighted ? '#ecfeff' : (transition.enabled ? '#f1f5f9' : '#f8fafc')}
-                    stroke={isHighlighted ? '#10b981' : (transition.enabled ? '#64748b' : '#cbd5e1')}
-                    strokeWidth={isHighlighted ? 3 : 2}
-                    className={`hover:fill-gray-100 transition-colors cursor-pointer ${isHighlighted ? 'animate-pulse' : ''}`}
+                    fill={fill}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    className={`hover:fill-gray-100 transition-colors cursor-pointer ${isPulse ? 'animate-pulse' : ''}`}
+                    rx={3}
+                    ry={3}
                 />
 
                 {/* Transition label */}
@@ -144,7 +161,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                 </text>
 
                 {/* Enabled indicator */}
-                {transition.enabled && (
+                {transition.enabled && !isInvalid && (
                     <circle
                         cx={x + width / 2 + 8}
                         cy={y - height / 2 + 8}
@@ -154,7 +171,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                 )}
             </g>
         );
-    }, [handleSelect, mode, highlightedTransitionId]);
+    }, [handleSelect, mode, highlightedTransitionId, validSet, invalidSet]);
 
     const renderArc = useCallback((link: LayoutLink, sourceNode: LayoutNode, targetNode: LayoutNode) => {
         const sourceX = sourceNode.x || 0;
@@ -295,9 +312,9 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                                 contentClass="w-full h-full flex items-center justify-center"
                             >
                                 <svg
-                                    width={Math.max(bounds.width, 400)}
+                                    width={Math.max(bounds.width + (ghostTransitions.length > 0 ? 200 : 0), 400)}
                                     height={Math.max(bounds.height, 300)}
-                                    viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`}
+                                    viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width + (ghostTransitions.length > 0 ? 200 : 0)} ${bounds.height}`}
                                     className="max-w-none"
                                 >
                                     <defs>
@@ -336,6 +353,48 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                                                 : renderTransition(node)
                                         )}
                                     </g>
+
+                                    {/* Ghost transitions (missing events) */}
+                                    {ghostTransitions.length > 0 && (
+                                        <g className="ghost-transitions">
+                                            {ghostTransitions.map((g, idx) => {
+                                                const x = bounds.maxX + 80
+                                                const y = bounds.minY + 60 + idx * 80
+                                                const width = 30
+                                                const height = 50
+                                                return (
+                                                    <g key={`${g.name}-${idx}`}>
+                                                        <rect
+                                                            x={x - width / 2}
+                                                            y={y - height / 2}
+                                                            width={width}
+                                                            height={height}
+                                                            fill="#fef2f2"
+                                                            stroke="#ef4444"
+                                                            strokeWidth={3}
+                                                            rx={3}
+                                                            ry={3}
+                                                        />
+                                                        <text
+                                                            x={x}
+                                                            y={y - height / 2 - 8}
+                                                            textAnchor="middle"
+                                                            fontSize="12"
+                                                            fontWeight="600"
+                                                            fill="#ef4444"
+                                                        >
+                                                            {g.name}
+                                                        </text>
+                                                        {/* count badge */}
+                                                        <g>
+                                                            <rect x={x + width / 2 + 6} y={y - height / 2 - 14} width={18} height={14} rx={7} ry={7} fill="#fee2e2" stroke="#ef4444" />
+                                                            <text x={x + width / 2 + 15} y={y - height / 2 - 3} textAnchor="middle" fontSize="10" fontWeight="700" fill="#ef4444">{g.count}</text>
+                                                        </g>
+                                                    </g>
+                                                )
+                                            })}
+                                        </g>
+                                    )}
                                 </svg>
                             </TransformComponent>
                         </>
@@ -346,7 +405,7 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
             {/* Legend */}
             <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Legend</h3>
-                <div className="flex gap-6 text-xs text-gray-600">
+                <div className="flex flex-wrap gap-6 text-xs text-gray-600">
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded-full bg-blue-100 border-2 border-blue-500"></div>
                         <span>Places</span>
@@ -362,6 +421,14 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-green-500"></div>
                         <span>Enabled</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-6 bg-emerald-50 border-2 border-emerald-500"></div>
+                        <span>Valid (replayed)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-6 bg-rose-50 border-2 border-rose-500"></div>
+                        <span>Invalid/Missing</span>
                     </div>
                 </div>
             </div>
@@ -389,6 +456,31 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                     <p className="text-xs text-gray-500">None</p>
                 )}
             </div>
+
+            {/* Execution narrative */}
+            {replaySequence.length > 0 && (
+                <div className="mt-3 p-3 bg-white rounded-lg border">
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Executed path up to selected step</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {replaySequence.map((e, i) => {
+                            const base = 'px-2 py-0.5 rounded-full text-xs border inline-flex items-center gap-1'
+                            const cls = e.status === 'valid'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : e.status === 'invalid'
+                                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                : e.status === 'missing'
+                                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                            return (
+                                <span key={i} className={`${base} ${cls}`} title={`#${e.step}`}>
+                                    <span className="font-mono">#{e.step}</span>
+                                    {e.name ? <span className="font-semibold">{e.name}</span> : <span>no fire</span>}
+                                </span>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

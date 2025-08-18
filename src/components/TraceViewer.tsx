@@ -1,11 +1,11 @@
-import { ExecutionTrace, PetriNet, SimulationStep } from '@/types'
+import { ExecutionTrace, PetriNet, SimulationStep, ReplayHighlights, ReplayStepEntry } from '@/types'
 import { fireTransition, updateTransitionStates } from '@/utils/petriNetUtils'
 import React, { useCallback, useMemo, useState } from 'react'
 
 interface TraceViewerProps {
     petriNet: PetriNet
     traces: ExecutionTrace[]
-    onApplyStep?: (updatedNet: PetriNet, step: SimulationStep, index: number) => void
+    onApplyStep?: (updatedNet: PetriNet, step: SimulationStep, index: number, highlights: ReplayHighlights) => void
     onWarn?: (message: string) => void
     title?: string
     onExportXES?: (trace: ExecutionTrace) => void
@@ -14,6 +14,8 @@ interface TraceViewerProps {
     onSelectTrace?: (trace: ExecutionTrace) => void
     // New: per-trace deviation counts (trace.id => count)
     deviationsByTrace?: Record<string, number>
+    // Optional: allow parent to reset markings
+    onResetMarking?: () => void
 }
 
 const cloneNet = (net: PetriNet): PetriNet => ({
@@ -40,54 +42,75 @@ const TraceViewer: React.FC<TraceViewerProps> = ({ petriNet, traces, onApplyStep
     const canPrev = cursor > 0
     const canNext = cursor < Math.max(steps.length - 1, 0)
 
-    const buildNetUpTo = useCallback((targetIdx: number): PetriNet => {
+    const buildUpToWithHighlights = useCallback((targetIdx: number): { net: PetriNet; highlights: ReplayHighlights } => {
         const trace = selectedTrace
-        if (!trace) return petriNet
-        // Start from provided start markings or current net
+        if (!trace) return { net: petriNet, highlights: { valid: [], invalidNotEnabled: [], missingEvents: [], sequence: [] } }
         let net = applyStartMarkings(cloneNet(petriNet), trace.startMarkings)
-        // Fire transitions step-by-step up to targetIdx
+        const valid: string[] = []
+        const invalidNotEnabled: string[] = []
+        const missingMap = new Map<string, number>()
+        const sequence: ReplayStepEntry[] = []
+
         for (let i = 0; i <= targetIdx && i < trace.steps.length; i++) {
             const s = trace.steps[i]
             if (!s.firedTransition) {
-                // noop step; still ensure transitions are updated
                 net = updateTransitionStates(net)
+                sequence.push({ step: s.step, status: 'noop' })
                 continue
             }
             const trans = net.transitions.find(t => t.id === s.firedTransition || t.name === s.firedTransition)
-            if (trans && trans.enabled) {
+            if (!trans) {
+                missingMap.set(s.firedTransition, (missingMap.get(s.firedTransition) ?? 0) + 1)
+                net = updateTransitionStates(net)
+                sequence.push({ step: s.step, status: 'missing', name: s.firedTransition })
+            } else if (trans.enabled) {
                 const res = fireTransition(net, trans.id)
                 net = res.petriNet
+                valid.push(trans.id)
+                sequence.push({ step: s.step, status: 'valid', transitionId: trans.id, name: trans.name })
             } else {
-                onWarn?.(`Step #${s.step}: Transition ${s.firedTransition} is not enabled; skipping fire`)
-                // keep net as-is; continue
+                invalidNotEnabled.push(trans.id)
                 net = updateTransitionStates(net)
+                sequence.push({ step: s.step, status: 'invalid', transitionId: trans.id, name: trans.name })
             }
         }
-        return net
-    }, [petriNet, selectedTrace, onWarn])
+
+        const highlights: ReplayHighlights = {
+            valid,
+            invalidNotEnabled,
+            missingEvents: Array.from(missingMap.entries()).map(([name, count]) => ({ name, count })),
+            sequence,
+        }
+        return { net, highlights }
+    }, [petriNet, selectedTrace])
 
     const applyCursor = useCallback((idx: number) => {
         const nextIdx = Math.max(0, Math.min(idx, Math.max(steps.length - 1, 0)))
         setCursor(nextIdx)
         const step = steps[nextIdx]
         if (step) {
-            const updated = buildNetUpTo(nextIdx)
-            onApplyStep?.(updated, step, nextIdx)
+            const { net, highlights } = buildUpToWithHighlights(nextIdx)
+            onApplyStep?.(net, step, nextIdx, highlights)
+            if ((highlights.invalidNotEnabled.length + highlights.missingEvents.length) > 0) {
+                onWarn?.(`Up to step #${step.step}: ${highlights.valid.length} valid, ${highlights.invalidNotEnabled.length} invalid, ${highlights.missingEvents.reduce((a, b) => a + b.count, 0)} missing`)
+            } else {
+                onWarn?.(`Up to step #${step.step}: ${highlights.valid.length} valid, no deviations`)
+            }
         }
-    }, [steps, buildNetUpTo, onApplyStep])
+    }, [steps, buildUpToWithHighlights, onApplyStep, onWarn])
 
     const handleSelectTrace = useCallback((id: string) => {
         setSelectedTraceId(id)
         setCursor(0)
         const trace = traces.find(t => t.id === id)
         if (trace && trace.steps.length > 0) {
-            const updated = buildNetUpTo(0)
-            onApplyStep?.(updated, trace.steps[0], 0)
+            const { net, highlights } = buildUpToWithHighlights(0)
+            onApplyStep?.(net, trace.steps[0], 0, highlights)
             onSelectTrace?.(trace)
         } else if (trace) {
             onSelectTrace?.(trace)
         }
-    }, [traces, buildNetUpTo, onApplyStep, onSelectTrace])
+    }, [traces, buildUpToWithHighlights, onApplyStep, onSelectTrace])
 
     const handlePrev = useCallback(() => applyCursor(cursor - 1), [applyCursor, cursor])
     const handleNext = useCallback(() => applyCursor(cursor + 1), [applyCursor, cursor])

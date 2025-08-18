@@ -2,7 +2,7 @@ import ConformanceControls from '@/components/ConformanceControls'
 import ConformanceResults from '@/components/ConformanceResults'
 import PetriNetVisualization from '@/components/PetriNetVisualization'
 import TraceViewer from '@/components/TraceViewer'
-import { ConformanceResult, Deviation, EventLog, ExecutionTrace, FileUploadResult, PetriNet, SimulationStep } from '@/types'
+import { ConformanceResult, Deviation, EventLog, ExecutionTrace, FileUploadResult, PetriNet, ReplayHighlights, SimulationStep } from '@/types'
 import { createDefaultPetriNet, fireTransition, updateTransitionStates } from '@/utils/petriNetUtils'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -24,6 +24,8 @@ const ConformancePage: React.FC = () => {
         const net = updateTransitionStates(createDefaultPetriNet())
         return net.places.reduce((acc, p) => { acc[p.id] = p.tokens; return acc }, {} as Record<string, number>)
     })
+    // New: conformance highlights to pass to visualization
+    const [replayHighlights, setReplayHighlights] = useState<ReplayHighlights>({ valid: [], invalidNotEnabled: [], missingEvents: [], sequence: [] })
 
     const traces: ExecutionTrace[] = useMemo(() => {
         if (!eventLog) return []
@@ -59,6 +61,7 @@ const ConformancePage: React.FC = () => {
             setHighlightedTransitionId(undefined)
             setPerTraceDeviations({})
             setSelectedTraceId(null)
+            setReplayHighlights({ valid: [], invalidNotEnabled: [], missingEvents: [], sequence: [] })
         } else {
             setUploadError(result.error || 'Unknown error occurred')
             console.error('File upload failed:', result.error)
@@ -75,6 +78,7 @@ const ConformancePage: React.FC = () => {
             setHighlightedTransitionId(undefined)
             setPerTraceDeviations({})
             setSelectedTraceId(null)
+            setReplayHighlights({ valid: [], invalidNotEnabled: [], missingEvents: [], sequence: [] })
         } else {
             setUploadError(result.error || 'Unknown event log file error occurred')
             console.error('Event log file upload failed:', result.error)
@@ -177,8 +181,9 @@ const ConformancePage: React.FC = () => {
         setIsLoading(false)
     }
 
-    const handleTraceApply = useCallback((net: PetriNet, step?: SimulationStep) => {
+    const handleTraceApply = useCallback((net: PetriNet, step?: SimulationStep, _index?: number, highlights?: ReplayHighlights) => {
         setPetriNet(net)
+        if (highlights) setReplayHighlights(highlights)
         if (step?.firedTransition) {
             const t = net.transitions.find(tt => tt.id === step.firedTransition || tt.name === step.firedTransition)
             if (t) {
@@ -209,6 +214,7 @@ const ConformancePage: React.FC = () => {
         })
         setHighlightedTransitionId(undefined)
         setMessage(null)
+        setReplayHighlights({ valid: [], invalidNotEnabled: [], missingEvents: [], sequence: [] })
     }, [initialMarkings])
 
     return (
@@ -263,7 +269,7 @@ const ConformancePage: React.FC = () => {
                     </div>
                 )}
 
-                <PetriNetVisualization mode="conformance" petriNet={petriNet} highlightedTransitionId={highlightedTransitionId} onResetMarking={handleResetMarking} />
+                <PetriNetVisualization mode="conformance" petriNet={petriNet} highlightedTransitionId={highlightedTransitionId} onResetMarking={handleResetMarking} highlightValidIds={replayHighlights.valid} highlightInvalidIds={replayHighlights.invalidNotEnabled} ghostTransitions={replayHighlights.missingEvents} replaySequence={replayHighlights.sequence} />
 
                 {conformanceResult && (
                     <ConformanceResults result={conformanceResult} />
@@ -275,7 +281,7 @@ const ConformancePage: React.FC = () => {
                         <TraceViewer
                             petriNet={petriNet}
                             traces={traces}
-                            onApplyStep={(updated, step) => handleTraceApply(updated, step)}
+                            onApplyStep={(updated, step, idx, highlights) => handleTraceApply(updated, step, idx, highlights)}
                             onWarn={(msg) => setMessage(msg)}
                             title="Cases"
                             onSelectTrace={(t) => setSelectedTraceId(t.id)}
