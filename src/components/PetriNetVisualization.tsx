@@ -1,8 +1,8 @@
 import { PetriNet, Place, Transition } from '@/types'
 import { computeLayout, getTokenPositions, LayoutLink, LayoutNode } from '@/utils/layoutUtils'
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
-import React, { useCallback, useMemo } from 'react'
-import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import { TransformComponent, TransformWrapper, useControls } from 'react-zoom-pan-pinch'
 
 interface PetriNetVisualizationProps {
     mode: 'simulator' | 'conformance',
@@ -20,11 +20,32 @@ interface PetriNetVisualizationProps {
     replaySequence?: Array<{ step: number; status: 'valid' | 'invalid' | 'missing' | 'noop'; name?: string; transitionId?: string }>
 }
 
+const FitToBounds: React.FC<{ size: { width: number; height: number } }> = ({ size }) => {
+    const { setTransform } = useControls();
+    const ref = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const el = ref.current?.parentElement; // wrapper size
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const pad = 16;
+        const availW = Math.max(100, rect.width - pad * 2);
+        const availH = Math.max(100, rect.height - pad * 2);
+        const scale = Math.min(availW / Math.max(1, size.width), availH / Math.max(1, size.height));
+        const x = (rect.width - size.width * scale) / 2;
+        const y = (rect.height - size.height * scale) / 2;
+        setTransform(x, y, scale);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [size.width, size.height]);
+
+    return <div ref={ref} />;
+};
+
 const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, petriNet, onFireTransition, onSelectElement, highlightedTransitionId, onResetMarking, highlightValidIds = [], highlightInvalidIds = [], ghostTransitions = [], replaySequence = [] }) => {
     // Compute layout using d3-force when petriNet changes
     const layout = useMemo(() => {
         if (!petriNet) return null;
-        return computeLayout(petriNet, 800, 600);
+        return computeLayout(petriNet, 1600, 900);
     }, [petriNet]);
 
     const validSet = useMemo(() => new Set(highlightValidIds), [highlightValidIds])
@@ -255,68 +276,52 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
         onFireTransition(id)
     }, [mode, onFireTransition])
 
+    const extraWidth = ghostTransitions.length > 0 ? 200 : 0;
+    const svgWidth = Math.max((layout?.bounds.width || 0) + extraWidth, 400);
+    const svgHeight = Math.max(layout?.bounds.height || 0, 300);
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-lg flex flex-col flex-shrink-0">
             <h2 className="text-xl font-semibold mb-4 border-b pb-3">
                 {mode === 'simulator' ? 'Petri Net Visualization' : 'Annotated Visualization'}
             </h2>
 
-            <div className="flex-grow bg-slate-50 rounded-lg relative min-h-[400px] overflow-hidden">
+            <div className="relative h-[60vh] min-h-[480px] bg-slate-50 rounded-lg overflow-hidden">
                 <TransformWrapper
-                    initialScale={1}
-                    minScale={0.2}
+                    minScale={0.1}
                     maxScale={3}
-                    centerOnInit={true}
                     wheel={{ step: 0.1 }}
                     pinch={{ step: 5 }}
+                    doubleClick={{ disabled: true }}
                 >
                     {({ zoomIn, zoomOut, resetTransform }) => (
                         <>
                             {/* Zoom controls */}
                             <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-                                <button
-                                    onClick={() => zoomIn()}
-                                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors"
-                                    title="Zoom In"
-                                >
+                                <button onClick={() => zoomIn()} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors" title="Zoom In">
                                     <ZoomIn size={18} />
                                 </button>
-                                <button
-                                    onClick={() => zoomOut()}
-                                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors"
-                                    title="Zoom Out"
-                                >
+                                <button onClick={() => zoomOut()} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors" title="Zoom Out">
                                     <ZoomOut size={18} />
                                 </button>
-                                <button
-                                    onClick={() => resetTransform()}
-                                    className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors"
-                                    title="Reset View"
-                                >
+                                <button onClick={() => resetTransform()} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors" title="Reset View">
                                     <RotateCcw size={18} />
                                 </button>
-                                {/* New: Reset marking */}
                                 {onResetMarking && (
-                                    <button
-                                        onClick={() => onResetMarking()}
-                                        className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors"
-                                        title="Reset Marking to Initial"
-                                    >
+                                    <button onClick={() => onResetMarking()} className="p-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors" title="Reset Marking to Initial">
                                         <RotateCcw size={18} />
                                     </button>
                                 )}
                             </div>
 
-                            <TransformComponent
-                                wrapperClass="w-full h-full"
-                                contentClass="w-full h-full"
-                            >
+                            {layout && <FitToBounds size={{ width: svgWidth, height: svgHeight }} />}
+
+                            <TransformComponent wrapperClass="w-full h-full" contentClass="w-full h-full flex items-center justify-center">
                                 <svg
-                                    width="100%"
-                                    height="100%"
+                                    width={svgWidth}
+                                    height={svgHeight}
                                     viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width + (ghostTransitions.length > 0 ? 200 : 0)} ${bounds.height}`}
-                                    preserveAspectRatio="xMidYMid meet"
-                                    className="w-full h-full"
+                                    className="max-w-none"
                                 >
                                     <defs>
                                         <marker
@@ -468,10 +473,10 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                             const cls = e.status === 'valid'
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                 : e.status === 'invalid'
-                                ? 'bg-rose-50 text-rose-800 border-rose-200'
-                                : e.status === 'missing'
-                                ? 'bg-rose-50 text-rose-800 border-rose-200'
-                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                                    ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                    : e.status === 'missing'
+                                        ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                        : 'bg-slate-100 text-slate-600 border-slate-200'
                             return (
                                 <span key={i} className={`${base} ${cls}`} title={`#${e.step}`}>
                                     <span className="font-mono">#{e.step}</span>
