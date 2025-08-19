@@ -321,7 +321,8 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                                     width={svgWidth}
                                     height={svgHeight}
                                     viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width + (ghostTransitions.length > 0 ? 200 : 0)} ${bounds.height}`}
-                                    className="max-w-none"
+                                    preserveAspectRatio="xMidYMid meet"
+                                    className="w-full h-full"
                                 >
                                     <defs>
                                         <marker
