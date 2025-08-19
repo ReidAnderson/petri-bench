@@ -261,9 +261,9 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
                 {mode === 'simulator' ? 'Petri Net Visualization' : 'Annotated Visualization'}
             </h2>
 
-            <div className="flex-grow bg-slate-50 rounded-lg relative min-h-[400px]">
+            <div className="flex-grow bg-slate-50 rounded-lg relative min-h-[400px] overflow-hidden">
                 <TransformWrapper
-                    initialScale={0.8}
+                    initialScale={1}
                     minScale={0.2}
                     maxScale={3}
                     centerOnInit={true}
@@ -309,13 +309,14 @@ const PetriNetVisualization: React.FC<PetriNetVisualizationProps> = ({ mode, pet
 
                             <TransformComponent
                                 wrapperClass="w-full h-full"
-                                contentClass="w-full h-full flex items-center justify-center"
+                                contentClass="w-full h-full"
                             >
                                 <svg
-                                    width={Math.max(bounds.width + (ghostTransitions.length > 0 ? 200 : 0), 400)}
-                                    height={Math.max(bounds.height, 300)}
+                                    width="100%"
+                                    height="100%"
                                     viewBox={`${bounds.minX} ${bounds.minY} ${bounds.width + (ghostTransitions.length > 0 ? 200 : 0)} ${bounds.height}`}
-                                    className="max-w-none"
+                                    preserveAspectRatio="xMidYMid meet"
+                                    className="w-full h-full"
                                 >
                                     <defs>
                                         <marker
