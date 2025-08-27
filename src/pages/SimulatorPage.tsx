@@ -1,4 +1,4 @@
-import PetriNetVisualization from '@/components/PetriNetVisualization'
+import ExperimentalVisualization from '@/components/ExperimentalVisualization'
 import SimulationControls from '@/components/SimulationControls'
 import SimulationResults from '@/components/SimulationResults'
 import TraceViewer from '@/components/TraceViewer'
@@ -431,7 +431,7 @@ const SimulatorPage: React.FC = () => {
                     )}
                 </div>
 
-                <PetriNetVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} onSelectElement={handleSelectElement} highlightedTransitionId={highlightedTransitionId} onResetMarking={handleResetMarking} />
+                <ExperimentalVisualization mode="simulator" petriNet={petriNet} onFireTransition={handleFireTransition} onSelectElement={handleSelectElement} highlightedTransitionId={highlightedTransitionId} onResetMarking={handleResetMarking} onPetriNetChange={setPetriNet} />
 
                 {simulationResult && (
                     <SimulationResults result={simulationResult} />
