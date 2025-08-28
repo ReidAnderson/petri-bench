@@ -1,7 +1,8 @@
-import { PetriNet, Place, Transition, ReplayStepEntry } from '@/types'
+import { PetriNet, Place, ReplayStepEntry, Transition } from '@/types'
 import { getTokenPositions } from '@/utils/layoutUtils'
 import { updateTransitionStates } from '@/utils/petriNetUtils'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RotateCcw } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import ReactFlow, {
     Background,
     Connection,
@@ -10,12 +11,11 @@ import ReactFlow, {
     MarkerType,
     MiniMap,
     Node,
+    NodeDragHandler,
     useEdgesState,
     useNodesState,
-    NodeDragHandler,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { RotateCcw } from 'lucide-react'
 
 // ----------------------------------------------------------------------------
 // Public props (superset of original PetriNetVisualization for drop-in replace)
@@ -38,12 +38,6 @@ export interface PetriNetVisualizationProps {
 // Internal helper types for React Flow node data
 interface PlaceNodeData { name: string; tokens: number; maxTokens?: number }
 interface TransitionNodeData { name: string; enabled: boolean }
-
-type SelectedEl =
-    | { type: 'place'; id: string }
-    | { type: 'transition'; id: string }
-    | { type: 'arc'; id: string }
-    | null
 
 // ----------------------------------------------------------------------------
 // Custom Node Components
@@ -89,75 +83,6 @@ const TransitionNode: React.FC<{ id: string; data: TransitionNodeData; selected:
 const nodeTypes = {
     place: PlaceNode,
     transition: TransitionNode,
-}
-
-// ----------------------------------------------------------------------------
-// Sidebar for editing (simulator mode only)
-// ----------------------------------------------------------------------------
-const Sidebar: React.FC<{
-    selected: SelectedEl
-    petriNet: PetriNet
-    onClose: () => void
-    onPetriNetChange: (net: PetriNet) => void
-}> = ({ selected, petriNet, onClose, onPetriNetChange }) => {
-    if (!selected) return null
-
-    const updateNet = (mutator: (draft: PetriNet) => void, updateEnabled = false) => {
-        const draft: PetriNet = JSON.parse(JSON.stringify(petriNet))
-        mutator(draft)
-        const next = updateEnabled ? updateTransitionStates(draft) : draft
-        onPetriNetChange(next)
-    }
-
-    const place = selected.type === 'place' ? petriNet.places.find(p => p.id === selected.id) : undefined
-    const transition = selected.type === 'transition' ? petriNet.transitions.find(t => t.id === selected.id) : undefined
-    const arc = selected.type === 'arc' ? petriNet.arcs.find(a => a.id === selected.id) : undefined
-
-    return (
-        <div className="absolute top-0 right-0 h-full w-72 bg-white border-l shadow-lg z-40 flex flex-col">
-            <div className="px-4 py-3 border-b flex items-center justify-between">
-                <h3 className="font-semibold text-sm capitalize">{selected.type} Properties</h3>
-                <button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-700">Close</button>
-            </div>
-            <div className="p-4 flex-1 overflow-y-auto space-y-4 text-sm">
-                {place && (
-                    <>
-                        <div>
-                            <label className="block text-xs font-medium mb-1">Name</label>
-                            <input className="w-full border rounded px-2 py-1 text-sm" value={place.name} onChange={e => updateNet(n => { const p = n.places.find(pp => pp.id === place.id)!; p.name = e.target.value }, false)} />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1">Tokens</label>
-                            <input type="number" min={0} className="w-full border rounded px-2 py-1 text-sm" value={place.tokens} onChange={e => updateNet(n => { const p = n.places.find(pp => pp.id === place.id)!; p.tokens = Math.max(0, parseInt(e.target.value || '0', 10)) }, true)} />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1">Max Tokens</label>
-                            <input type="number" min={0} className="w-full border rounded px-2 py-1 text-sm" value={place.maxTokens ?? ''} onChange={e => updateNet(n => { const p = n.places.find(pp => pp.id === place.id)!; const v = e.target.value; p.maxTokens = v === '' ? undefined : Math.max(0, parseInt(v, 10)) }, false)} />
-                        </div>
-                    </>
-                )}
-                {transition && (
-                    <div>
-                        <label className="block text-xs font-medium mb-1">Name</label>
-                        <input className="w-full border rounded px-2 py-1 text-sm" value={transition.name} onChange={e => updateNet(n => { const t = n.transitions.find(tt => tt.id === transition.id)!; t.name = e.target.value }, false)} />
-                    </div>
-                )}
-                {arc && (
-                    <div>
-                        <label className="block text-xs font-medium mb-1">Weight</label>
-                        <input type="number" min={1} className="w-full border rounded px-2 py-1 text-sm" value={arc.weight} onChange={e => updateNet(n => { const a = n.arcs.find(aa => aa.id === arc.id)!; a.weight = Math.max(1, parseInt(e.target.value || '1', 10)) }, true)} />
-                    </div>
-                )}
-            </div>
-            <div className="p-3 border-t flex gap-2">
-                <button className="px-3 py-1.5 rounded bg-rose-600 text-white text-xs" onClick={() => updateNet(n => {
-                    if (selected.type === 'place') { n.arcs = n.arcs.filter(a => a.source !== selected.id && a.target !== selected.id); n.places = n.places.filter(p => p.id !== selected.id) }
-                    else if (selected.type === 'transition') { n.arcs = n.arcs.filter(a => a.source !== selected.id && a.target !== selected.id); n.transitions = n.transitions.filter(t => t.id !== selected.id) }
-                    else if (selected.type === 'arc') { n.arcs = n.arcs.filter(a => a.id !== selected.id) }
-                }, true)}>Delete</button>
-            </div>
-        </div>
-    )
 }
 
 // ----------------------------------------------------------------------------
@@ -224,9 +149,6 @@ const ExperimentalVisualization: React.FC<PetriNetVisualizationProps> = ({
     // Sync when petriNet changes from outside
     useEffect(() => { setNodes(rfNodes); setEdges(rfEdges) }, [rfNodes, rfEdges, setNodes, setEdges])
 
-    // Track selection
-    const [selected, setSelected] = useState<SelectedEl>(null)
-
     // Valid/invalid sets
     const validSet = useMemo(() => new Set(highlightValidIds), [highlightValidIds])
     const invalidSet = useMemo(() => new Set(highlightInvalidIds), [highlightInvalidIds])
@@ -254,11 +176,9 @@ const ExperimentalVisualization: React.FC<PetriNetVisualizationProps> = ({
 
     const onConnect = useCallback((connection: Connection) => {
         if (!petriNet || !onPetriNetChange || !editable || !connection.source || !connection.target) return
-        // prevent same type connections
         const sourceType = petriNet.places.some(p => p.id === connection.source) ? 'place' : 'transition'
         const targetType = petriNet.places.some(p => p.id === connection.target) ? 'place' : 'transition'
         if (sourceType === targetType) return
-        // avoid duplicates
         if (petriNet.arcs.some(a => a.source === connection.source && a.target === connection.target)) return
         const newArcId = `a${Date.now()}`
         const next: PetriNet = {
@@ -268,23 +188,17 @@ const ExperimentalVisualization: React.FC<PetriNetVisualizationProps> = ({
         onPetriNetChange(updateTransitionStates(next))
     }, [petriNet, onPetriNetChange, editable])
 
-    const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-        if (node.type === 'transition') {
-            // Fire transition when enabled & not editing a drag
+    const handleNodeClick = useCallback((e: React.MouseEvent, node: Node) => {
+        // Ctrl+Click on an enabled transition fires it
+        if (node.type === 'transition' && e.ctrlKey) {
             if (onFireTransition && petriNet?.transitions.find(t => t.id === node.id)?.enabled) {
                 onFireTransition(node.id)
             }
+            return
         }
+        // Just notify selection upward for external sidebar
         if (onSelectElement) onSelectElement({ type: node.type as 'place' | 'transition', id: node.id })
-        if (editable) setSelected({ type: node.type as 'place' | 'transition', id: node.id })
-    }, [editable, onFireTransition, onSelectElement, petriNet])
-
-    const handleEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
-        if (!editable) return
-        setSelected({ type: 'arc', id: edge.id })
-    }, [editable])
-
-    const onPaneClick = useCallback(() => { if (editable) setSelected(null) }, [editable])
+    }, [onFireTransition, onSelectElement, petriNet])
 
     const addPlace = useCallback(() => {
         if (!petriNet || !onPetriNetChange) return
@@ -306,7 +220,7 @@ const ExperimentalVisualization: React.FC<PetriNetVisualizationProps> = ({
         onPetriNetChange(next)
     }, [petriNet, onPetriNetChange])
 
-    // Highlight styling injection (modify node data styling after render)
+    // Highlight styling injection
     const styledNodes = useMemo(() => nodes.map(n => {
         if (n.type === 'transition') {
             const pulse = highlightedTransitionId === n.id
@@ -317,10 +231,7 @@ const ExperimentalVisualization: React.FC<PetriNetVisualizationProps> = ({
         return n
     }), [nodes, highlightedTransitionId, validSet, invalidSet])
 
-    // Narrative chips (replaySequence + ghostTransitions) combine missing events counts
-    const narrative = useMemo(() => {
-        return replaySequence.map(s => ({ ...s }))
-    }, [replaySequence])
+    const narrative = useMemo(() => replaySequence.map(s => ({ ...s })), [replaySequence])
 
     if (!petriNet) {
         return (
@@ -348,6 +259,11 @@ const ExperimentalVisualization: React.FC<PetriNetVisualizationProps> = ({
                 )}
             </div>
             <div className="relative" ref={reactFlowWrapper} style={{ height: '60vh', minHeight: 420 }}>
+                {editable && (
+                    <div className="pointer-events-none absolute z-10 top-2 left-2 text-[11px] text-slate-600 bg-white/80 backdrop-blur px-2 py-1 rounded border border-slate-200 shadow-sm">
+                        Ctrl+Click an enabled transition to fire
+                    </div>
+                )}
                 <ReactFlow
                     nodes={styledNodes as any}
                     edges={edges}
@@ -355,8 +271,6 @@ const ExperimentalVisualization: React.FC<PetriNetVisualizationProps> = ({
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
                     onNodeClick={handleNodeClick}
-                    onEdgeClick={handleEdgeClick}
-                    onPaneClick={onPaneClick}
                     onNodeDragStop={onNodeDragStop}
                     nodesDraggable={editable}
                     nodesConnectable={editable}
@@ -377,14 +291,6 @@ const ExperimentalVisualization: React.FC<PetriNetVisualizationProps> = ({
                     <Controls />
                     <Background />
                 </ReactFlow>
-                {editable && selected && (
-                    <Sidebar
-                        selected={selected}
-                        petriNet={petriNet}
-                        onClose={() => setSelected(null)}
-                        onPetriNetChange={n => onPetriNetChange && onPetriNetChange(n)}
-                    />
-                )}
             </div>
             {narrative.length > 0 && (
                 <div className="mt-4 p-3 rounded border bg-white">
