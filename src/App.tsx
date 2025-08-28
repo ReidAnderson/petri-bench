@@ -3,6 +3,7 @@ import ConformancePage from '@/pages/ConformancePage'
 import SimulatorPage from '@/pages/SimulatorPage'
 import { useState } from 'react'
 import { Route, HashRouter as Router, Routes } from 'react-router-dom'
+import EditorPage from './pages/EditorPage'
 
 function App() {
     const [currentPage, setCurrentPage] = useState<'simulator' | 'conformance'>('simulator')
@@ -21,6 +22,7 @@ function App() {
                         />
                         <Route path="/simulator" element={<SimulatorPage />} />
                         <Route path="/conformance" element={<ConformancePage />} />
+                        <Route path="/experimental" element={<EditorPage />} />
                     </Routes>
                 </main>
             </div>

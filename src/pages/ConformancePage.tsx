@@ -1,6 +1,6 @@
 import ConformanceControls from '@/components/ConformanceControls'
 import ConformanceResults from '@/components/ConformanceResults'
-import PetriNetVisualization from '@/components/PetriNetVisualization'
+import ExperimentalVisualization from '@/components/ExperimentalVisualization'
 import TraceViewer from '@/components/TraceViewer'
 import { ConformanceResult, Deviation, EventLog, ExecutionTrace, FileUploadResult, PetriNet, ReplayHighlights, SimulationStep } from '@/types'
 import { createDefaultPetriNet, fireTransition, updateTransitionStates } from '@/utils/petriNetUtils'
@@ -269,7 +269,7 @@ const ConformancePage: React.FC = () => {
                     </div>
                 )}
 
-                <PetriNetVisualization mode="conformance" petriNet={petriNet} highlightedTransitionId={highlightedTransitionId} onResetMarking={handleResetMarking} highlightValidIds={replayHighlights.valid} highlightInvalidIds={replayHighlights.invalidNotEnabled} ghostTransitions={replayHighlights.missingEvents} replaySequence={replayHighlights.sequence} />
+                <ExperimentalVisualization mode="conformance" petriNet={petriNet} highlightedTransitionId={highlightedTransitionId} onResetMarking={handleResetMarking} highlightValidIds={replayHighlights.valid} highlightInvalidIds={replayHighlights.invalidNotEnabled} replaySequence={replayHighlights.sequence} onPetriNetChange={setPetriNet} />
 
                 {conformanceResult && (
                     <ConformanceResults result={conformanceResult} />

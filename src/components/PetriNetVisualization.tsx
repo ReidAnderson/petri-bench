@@ -4,7 +4,7 @@ import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { TransformComponent, TransformWrapper, useControls } from 'react-zoom-pan-pinch'
 
-interface PetriNetVisualizationProps {
+export interface PetriNetVisualizationProps {
     mode: 'simulator' | 'conformance',
     petriNet: PetriNet | null,
     onFireTransition?: (transitionId: string) => void,
