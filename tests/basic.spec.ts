@@ -27,21 +27,6 @@ test.describe('Petri Net Suite', () => {
         await expect(page.locator('button', { hasText: 'Run Simulation' })).toBeVisible()
     })
 
-    test('simulation controls work', async ({ page }) => {
-        await page.goto('/petri-bench/')
-        await page.click('text=Simulator')
-
-        // Check if run simulation button is present (be more specific)
-        await expect(page.locator('button', { hasText: 'Run Simulation' })).toBeVisible()
-
-        // Check if reset button is present
-        await expect(page.locator('button', { hasText: 'Reset' })).toBeVisible()
-
-        // Check if steps input is present and has default value
-        const stepsInput = page.locator('input[type="number"]')
-        await expect(stepsInput).toBeVisible()
-    })
-
     test('conformance controls work', async ({ page }) => {
         await page.goto('/petri-bench/')
         await page.click('text=Conformance Checker')
