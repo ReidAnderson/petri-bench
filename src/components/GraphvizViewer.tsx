@@ -22,14 +22,14 @@ export function GraphvizViewer({ dot }: Props) {
         // Initialize graphviz instance once per mount
         const selection = d3.select(container);
         // @ts-expect-error - graphviz() is injected by d3-graphviz
-            const gv = selection.graphviz({
+        const gv = selection.graphviz({
             useWorker: false,
             zoom: true,
             fit: true,
             engine: 'dot',
             images: true,
-                // Support wasm assets from public/wasm; respect Vite base path
-                wasmFolder: `${import.meta.env.BASE_URL}wasm`
+            // Support wasm assets from public/wasm; respect Vite base path
+            wasmFolder: `${import.meta.env.BASE_URL}wasm`
         });
 
         return () => {
