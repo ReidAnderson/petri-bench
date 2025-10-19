@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/index.ts"],
+  "sourcesContent": ["export namespace Base91 {\n    export function load() {\n        return import(\"./base91.js\").then(mod => mod.Base91.load());\n    }\n}\nexport namespace DuckDB {\n    export function load() {\n        return import(\"./duckdb.js\").then(mod => mod.DuckDB.load());\n    }\n}\nexport namespace Expat {\n    export function load() {\n        return import(\"./expat.js\").then(mod => mod.Expat.load());\n    }\n}\nexport namespace Graphviz {\n    export function load() {\n        return import(\"./graphviz.js\").then(mod => mod.Graphviz.load());\n    }\n}\nexport namespace Zstd {\n    export function load() {\n        return import(\"./zstd.js\").then(mod => mod.Zstd.load());\n    }\n}\n"],
+  "mappings": "AAAO,IAAUA,MAAV,CACI,SAASC,GAAO,CACnB,MAAO,QAAO,aAAa,EAAE,KAAKC,GAAOA,EAAI,OAAO,KAAK,CAAC,CAC9D,CAFOF,EAAS,KAAAC,IADHD,IAAA,IAKV,IAAUG,MAAV,CACI,SAASF,GAAO,CACnB,MAAO,QAAO,aAAa,EAAE,KAAKC,GAAOA,EAAI,OAAO,KAAK,CAAC,CAC9D,CAFOC,EAAS,KAAAF,IADHE,IAAA,IAKV,IAAUC,MAAV,CACI,SAASH,GAAO,CACnB,MAAO,QAAO,YAAY,EAAE,KAAKC,GAAOA,EAAI,MAAM,KAAK,CAAC,CAC5D,CAFOE,EAAS,KAAAH,IADHG,IAAA,IAKV,IAAUC,MAAV,CACI,SAASJ,GAAO,CACnB,MAAO,QAAO,eAAe,EAAE,KAAKC,GAAOA,EAAI,SAAS,KAAK,CAAC,CAClE,CAFOG,EAAS,KAAAJ,IADHI,IAAA,IAKV,IAAUC,MAAV,CACI,SAASL,GAAO,CACnB,MAAO,QAAO,WAAW,EAAE,KAAKC,GAAOA,EAAI,KAAK,KAAK,CAAC,CAC1D,CAFOI,EAAS,KAAAL,IADHK,IAAA",
+  "names": ["Base91", "load", "mod", "DuckDB", "Expat", "Graphviz", "Zstd"]
+}
