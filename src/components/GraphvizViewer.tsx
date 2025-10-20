@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 type Props = {
     dot: string;
+    onZoomChange?: (k: number) => void;
 };
 
 export type GraphvizHandle = {
@@ -17,8 +18,10 @@ export type GraphvizHandle = {
 
 // Access d3 graphviz extensions through any to avoid type issues
 
-export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot }, ref) => {
+export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const cbRef = useRef(onZoomChange);
+    useEffect(() => { cbRef.current = onZoomChange; }, [onZoomChange]);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -26,8 +29,8 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot }, ref) =
 
         // Initialize graphviz instance once per mount
         const selection = d3.select(container);
-    const anySel: any = selection as any;
-    anySel.graphviz({
+        const anySel: any = selection as any;
+        anySel.graphviz({
             useWorker: false,
             zoom: true,
             fit: true,
@@ -46,10 +49,21 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot }, ref) =
     useEffect(() => {
         if (!containerRef.current) return;
         const selection = d3.select(containerRef.current);
-    const anySel: any = selection as any;
-    const gv = anySel.graphviz();
+        const anySel: any = selection as any;
+        const gv = anySel.graphviz();
         if (!gv) return;
         gv.renderDot(dot);
+        // Attach zoom listener to update scale label
+        const svgSel: any = selection.select('svg');
+        const update = () => {
+            const node = svgSel?.node?.();
+            if (!node) return;
+            const t = d3.zoomTransform(node as Element);
+            if (typeof t?.k === 'number') cbRef.current?.(t.k);
+        };
+        svgSel.on('zoom.zoomLabel', update);
+        // Update once after render
+        setTimeout(update, 0);
     }, [dot]);
 
     useImperativeHandle(ref, () => ({

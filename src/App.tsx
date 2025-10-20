@@ -11,6 +11,7 @@ export default function App() {
     const [error, setError] = useState<string | null>(null);
     const [rankdir, setRankdir] = useState<RankDir>('LR');
     const gvRef = useRef<GraphvizHandle | null>(null);
+    const [zoom, setZoom] = useState(1);
 
     const onExportSVG = useCallback(() => {
         const svg = gvRef.current?.exportSVG();
@@ -61,10 +62,8 @@ export default function App() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span>Graph</span>
                             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <button title="Zoom out" onClick={() => gvRef.current?.zoomOut()} style={btnStyle}>-</button>
                                 <button title="Reset" onClick={() => gvRef.current?.resetZoom()} style={btnStyle}>100%</button>
-                                <button title="Zoom in" onClick={() => gvRef.current?.zoomIn()} style={btnStyle}>+</button>
-                                <button title="Fit" onClick={() => gvRef.current?.fit()} style={btnStyle}>Fit</button>
+                                <span style={{ color: 'var(--muted)', minWidth: 48, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
                                 <div style={{ width: 1, height: 16, background: '#1f2937' }} />
                                 <button title="Export SVG" onClick={onExportSVG} style={btnStyle}>SVG</button>
                                 <button title="Export PNG" onClick={onExportPNG} style={btnStyle}>PNG</button>
@@ -84,7 +83,7 @@ export default function App() {
                             </div>
                         </div>
                     </div>
-                    <GraphvizViewer ref={gvRef} dot={dot} />
+                    <GraphvizViewer ref={gvRef} dot={dot} onZoomChange={setZoom} />
                 </div>
             </Split>
         </div>
