@@ -3,16 +3,17 @@ import Split from 'react-split';
 import { GraphvizViewer, type GraphvizHandle } from './components/GraphvizViewer';
 import { samplePetriNet } from './sample';
 import { parsePetriNet } from './utils/parser';
-import type { PetriNetInput } from './utils/types';
-import { toDot, type RankDir } from './utils/toDot';
-import { useDebounce } from './utils/useDebounce';
 import { replayTransitionsDetailed } from './utils/simulate';
+import { toDot, type RankDir } from './utils/toDot';
+import { resolveTransitionRefs } from './utils/trace';
+import type { PetriNetInput } from './utils/types';
+import { useDebounce } from './utils/useDebounce';
 
 export default function App() {
     const [text, setText] = useState<string>(JSON.stringify(samplePetriNet, null, 2));
     const [error, setError] = useState<string | null>(null);
     const [transitionsText, setTransitionsText] = useState<string>("T0, T1");
-    const [rankdir, setRankdir] = useState<RankDir>('LR');
+    const [rankdir, setRankdir] = useState<RankDir>('TB');
     const gvRef = useRef<GraphvizHandle | null>(null);
     const [zoom, setZoom] = useState(1);
 
@@ -36,21 +37,19 @@ export default function App() {
     const computed = useMemo(() => {
         try {
             const parsed: PetriNetInput = parsePetriNet(debouncedText);
-            // parse transitions sequence: accept comma/space/line separated ids
-            const seq = debouncedTrans
+            // parse transitions sequence: accept comma/space/line separated ids or labels
+            const refs = debouncedTrans
                 .split(/[\,\n\r\t\s]+/)
                 .map((s) => s.trim())
                 .filter(Boolean);
-
-            // Inline validation for unknown ids
-            const tSet = new Set(parsed.transitions.map(t => t.id));
-            const unknown = seq.filter(id => !tSet.has(id));
-
+            const resolved = resolveTransitionRefs(parsed, refs);
+            const seq = resolved.ids;
             // Non-strict by default: skip invalid firings but continue
             const res = seq.length ? replayTransitionsDetailed(parsed, seq, { strict: false }) : { model: parsed, warnings: [] as string[] };
-            const label = seq.length ? `Applied: ${seq.join(' → ')}${res.warnings.length ? `\n(${res.warnings.length} warning${res.warnings.length>1?'s':''})` : ''}` : undefined;
+            const totalWarnings = [...resolved.warnings, ...res.warnings];
+            const label = refs.length ? `Applied: ${refs.join(' → ')}${totalWarnings.length ? `\n(${totalWarnings.length} warning${totalWarnings.length > 1 ? 's' : ''})` : ''}` : undefined;
             const dot = toDot(res.model, { rankdir, label });
-            return { dot, unknown, warnings: res.warnings, error: null as string | null };
+            return { dot, unknown: resolved.unknown, warnings: totalWarnings, error: null as string | null };
         } catch (e: any) {
             return { dot: 'digraph G { label="Invalid input" }', unknown: [] as string[], warnings: [] as string[], error: e?.message ?? String(e) };
         }
@@ -68,7 +67,7 @@ export default function App() {
         <div className="app-root">
             <Split className="split" sizes={[40, 60]} minSize={200} gutterSize={8}>
                 <div className="pane left">
-                    <div className="pane-header">Petri net (JSON)</div>
+                    <div className="pane-header">Petri net (JSON or PNML)</div>
                     <textarea
                         className="editor"
                         value={text}
