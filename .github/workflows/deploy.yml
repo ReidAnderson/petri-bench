@@ -41,6 +41,7 @@ jobs:
           npm run build
       - name: Test
         run: |
+          export GITHUB_PAGES=1
           npx playwright install --with-deps
           npm test
           npm run test:e2e
