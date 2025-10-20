@@ -2,13 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Split from 'react-split';
 import { GraphvizViewer, type GraphvizHandle } from './components/GraphvizViewer';
 import { samplePetriNet } from './sample';
-import { parsePetriNet, type PetriNetInput } from './utils/parser';
+import { parsePetriNet } from './utils/parser';
+import type { PetriNetInput } from './utils/types';
 import { toDot, type RankDir } from './utils/toDot';
 import { useDebounce } from './utils/useDebounce';
+import { replayTransitionsDetailed } from './utils/simulate';
 
 export default function App() {
     const [text, setText] = useState<string>(JSON.stringify(samplePetriNet, null, 2));
     const [error, setError] = useState<string | null>(null);
+    const [transitionsText, setTransitionsText] = useState<string>("T0, T1");
     const [rankdir, setRankdir] = useState<RankDir>('LR');
     const gvRef = useRef<GraphvizHandle | null>(null);
     const [zoom, setZoom] = useState(1);
@@ -29,20 +32,37 @@ export default function App() {
     }, []);
 
     const debouncedText = useDebounce(text, 300);
-    const dot = useMemo(() => {
+    const debouncedTrans = useDebounce(transitionsText, 300);
+    const computed = useMemo(() => {
         try {
             const parsed: PetriNetInput = parsePetriNet(debouncedText);
-            setError(null);
-            return toDot(parsed, { rankdir });
+            // parse transitions sequence: accept comma/space/line separated ids
+            const seq = debouncedTrans
+                .split(/[\,\n\r\t\s]+/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+
+            // Inline validation for unknown ids
+            const tSet = new Set(parsed.transitions.map(t => t.id));
+            const unknown = seq.filter(id => !tSet.has(id));
+
+            // Non-strict by default: skip invalid firings but continue
+            const res = seq.length ? replayTransitionsDetailed(parsed, seq, { strict: false }) : { model: parsed, warnings: [] as string[] };
+            const label = seq.length ? `Applied: ${seq.join(' → ')}${res.warnings.length ? `\n(${res.warnings.length} warning${res.warnings.length>1?'s':''})` : ''}` : undefined;
+            const dot = toDot(res.model, { rankdir, label });
+            return { dot, unknown, warnings: res.warnings, error: null as string | null };
         } catch (e: any) {
-            setError(e?.message ?? String(e));
-            return 'digraph G { label="Invalid input" }';
+            return { dot: 'digraph G { label="Invalid input" }', unknown: [] as string[], warnings: [] as string[], error: e?.message ?? String(e) };
         }
-    }, [debouncedText, rankdir]);
+    }, [debouncedText, debouncedTrans, rankdir]);
+
+    useEffect(() => {
+        setError(computed.error);
+    }, [computed.error]);
 
     useEffect(() => {
         // no-op; dot recomputes via memo
-    }, [dot]);
+    }, [computed.dot]);
 
     return (
         <div className="app-root">
@@ -55,6 +75,32 @@ export default function App() {
                         onChange={(e) => setText(e.target.value)}
                         spellCheck={false}
                     />
+                    <div className="pane-header">Transitions (IDs, comma/space separated)</div>
+                    <textarea
+                        className="editor"
+                        value={transitionsText}
+                        onChange={(e) => setTransitionsText(e.target.value)}
+                        placeholder="Example: T0, T1, T2"
+                        spellCheck={false}
+                        style={{ flex: '0 0 auto', height: 80 }}
+                    />
+                    {/* Inline hints for transitions */}
+                    {(computed.unknown.length > 0 || computed.warnings.length > 0) && (
+                        <div style={{ padding: '6px 12px', borderTop: '1px solid #1f2937', color: 'var(--muted)' }}>
+                            {computed.unknown.length > 0 && (
+                                <div style={{ color: 'var(--error)' }}>Unknown IDs: {computed.unknown.join(', ')}</div>
+                            )}
+                            {computed.warnings.length > 0 && (
+                                <div>
+                                    Warnings: {computed.warnings.length}
+                                    <ul style={{ margin: '4px 0 0 16px' }}>
+                                        {computed.warnings.slice(0, 3).map((w, i) => (<li key={i}>{w}</li>))}
+                                        {computed.warnings.length > 3 && <li>…and {computed.warnings.length - 3} more</li>}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {error && <div className="error">{error}</div>}
                 </div>
                 <div className="pane right">
@@ -83,7 +129,7 @@ export default function App() {
                             </div>
                         </div>
                     </div>
-                    <GraphvizViewer ref={gvRef} dot={dot} onZoomChange={setZoom} />
+                    <GraphvizViewer ref={gvRef} dot={computed.dot} onZoomChange={setZoom} />
                 </div>
             </Split>
         </div>
