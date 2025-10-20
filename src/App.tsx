@@ -70,6 +70,7 @@ export default function App() {
                     <div className="pane-header">Petri net (JSON or PNML)</div>
                     <textarea
                         className="editor"
+                        data-testid="petri-input"
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         spellCheck={false}
@@ -77,6 +78,7 @@ export default function App() {
                     <div className="pane-header">Transitions (IDs, comma/space separated)</div>
                     <textarea
                         className="editor"
+                        data-testid="transitions-input"
                         value={transitionsText}
                         onChange={(e) => setTransitionsText(e.target.value)}
                         placeholder="Example: T0, T1, T2"
