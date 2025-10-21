@@ -5,8 +5,8 @@ test.describe('Petri Bench app', () => {
         // Use Vite preview default port or environment BASE_URL if present
         await page.goto('/');
 
-        // Left pane: textarea should exist
-        const textarea = page.locator('textarea.editor');
+        // Left pane: specifically select the Petri net textarea using data-testid
+        const textarea = page.locator('[data-testid="petri-input"].editor');
         await expect(textarea).toBeVisible();
 
         // Right header contains Direction select

@@ -1,13 +1,18 @@
 import type { PetriNetInput } from './types';
 
 export type RankDir = 'LR' | 'TB' | 'RL' | 'BT';
+export type ToDotOptions = { rankdir?: RankDir; label?: string };
 
-export function toDot(model: PetriNetInput, options?: { rankdir?: RankDir }): string {
+export function toDot(model: PetriNetInput, options?: ToDotOptions): string {
     const lines: string[] = [];
     lines.push('digraph PetriNet {');
     const rankdir = options?.rankdir ?? 'LR';
     lines.push(`  rankdir=${rankdir};`);
     lines.push('  bgcolor="white";');
+    if (options?.label) {
+        lines.push(`  labelloc=t;`);
+        lines.push(`  label="${escapeLabel(options.label)}";`);
+    }
     lines.push('  node [fontsize=12];');
     lines.push('  edge [fontsize=10, arrowsize=0.8];');
 

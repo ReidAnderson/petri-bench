@@ -6,7 +6,7 @@ const host = 'http://localhost:4173';
 export default defineConfig({
     testDir: 'tests/e2e',
     webServer: {
-        command: 'npm run preview',
+    command: 'npm run build && npm run preview',
         url: host,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
