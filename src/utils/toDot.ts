@@ -36,7 +36,7 @@ export function toDot(model: PetriNetInput, options?: ToDotOptions): string {
     // Arcs
     lines.push('  // Arcs');
     for (const a of model.arcs) {
-        const w = (a as any).weight && (a as any).weight !== 1 ? ` [label="${(a as any).weight}"]` : '';
+        const w = a.weight && a.weight !== 1 ? ` [label="${a.weight}"]` : '';
         lines.push(`  "${a.from}" -> "${a.to}"${w};`);
     }
 
