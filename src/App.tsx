@@ -2,12 +2,34 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Split from 'react-split';
 import { GraphvizViewer, type GraphvizHandle } from './components/GraphvizViewer';
 import { samplePetriNet } from './sample';
+import { triggerDownload } from './utils/download';
 import { parsePetriNet } from './utils/parser';
 import { replayTransitionsDetailed } from './utils/simulate';
 import { toDot, type RankDir } from './utils/toDot';
 import { resolveTransitionRefs } from './utils/trace';
 import type { PetriNetInput } from './utils/types';
 import { useDebounce } from './utils/useDebounce';
+
+function computePetriNet(text: string, transitions: string, rankdir: RankDir) {
+    try {
+        const parsed: PetriNetInput = parsePetriNet(text);
+        // parse transitions sequence: accept comma/space/line separated ids or labels
+        const refs = transitions
+            .split(/[\,\n\r\t\s]+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const resolved = resolveTransitionRefs(parsed, refs);
+        const seq = resolved.ids;
+        // Non-strict by default: skip invalid firings but continue
+        const res = seq.length ? replayTransitionsDetailed(parsed, seq, { strict: false }) : { model: parsed, warnings: [] as string[] };
+        const totalWarnings = [...resolved.warnings, ...res.warnings];
+        const label = refs.length ? `Applied: ${refs.join(' → ')}${totalWarnings.length ? `\n(${totalWarnings.length} warning${totalWarnings.length > 1 ? 's' : ''})` : ''}` : undefined;
+        const dot = toDot(res.model, { rankdir, label });
+        return { dot, unknown: resolved.unknown, warnings: totalWarnings, error: null as string | null };
+    } catch (e: any) {
+        return { dot: 'digraph G { label="Invalid input" }', unknown: [] as string[], warnings: [] as string[], error: e?.message ?? String(e) };
+    }
+}
 
 export default function App() {
     const [text, setText] = useState<string>(JSON.stringify(samplePetriNet, null, 2));
@@ -16,6 +38,7 @@ export default function App() {
     const [rankdir, setRankdir] = useState<RankDir>('TB');
     const gvRef = useRef<GraphvizHandle | null>(null);
     const [zoom, setZoom] = useState(1);
+    const [showAllWarnings, setShowAllWarnings] = useState(false);
 
     const onExportSVG = useCallback(() => {
         const svg = gvRef.current?.exportSVG();
@@ -35,24 +58,7 @@ export default function App() {
     const debouncedText = useDebounce(text, 300);
     const debouncedTrans = useDebounce(transitionsText, 300);
     const computed = useMemo(() => {
-        try {
-            const parsed: PetriNetInput = parsePetriNet(debouncedText);
-            // parse transitions sequence: accept comma/space/line separated ids or labels
-            const refs = debouncedTrans
-                .split(/[\,\n\r\t\s]+/)
-                .map((s) => s.trim())
-                .filter(Boolean);
-            const resolved = resolveTransitionRefs(parsed, refs);
-            const seq = resolved.ids;
-            // Non-strict by default: skip invalid firings but continue
-            const res = seq.length ? replayTransitionsDetailed(parsed, seq, { strict: false }) : { model: parsed, warnings: [] as string[] };
-            const totalWarnings = [...resolved.warnings, ...res.warnings];
-            const label = refs.length ? `Applied: ${refs.join(' → ')}${totalWarnings.length ? `\n(${totalWarnings.length} warning${totalWarnings.length > 1 ? 's' : ''})` : ''}` : undefined;
-            const dot = toDot(res.model, { rankdir, label });
-            return { dot, unknown: resolved.unknown, warnings: totalWarnings, error: null as string | null };
-        } catch (e: any) {
-            return { dot: 'digraph G { label="Invalid input" }', unknown: [] as string[], warnings: [] as string[], error: e?.message ?? String(e) };
-        }
+        return computePetriNet(debouncedText, debouncedTrans, rankdir)
     }, [debouncedText, debouncedTrans, rankdir]);
 
     useEffect(() => {
@@ -83,20 +89,26 @@ export default function App() {
                         onChange={(e) => setTransitionsText(e.target.value)}
                         placeholder="Example: T0, T1, T2"
                         spellCheck={false}
-                        style={{ flex: '0 0 auto', height: 80 }}
+                        style={styles.transitionsTextarea}
                     />
                     {/* Inline hints for transitions */}
                     {(computed.unknown.length > 0 || computed.warnings.length > 0) && (
-                        <div style={{ padding: '6px 12px', borderTop: '1px solid #1f2937', color: 'var(--muted)' }}>
+                        <div style={styles.warningsContainer}>
                             {computed.unknown.length > 0 && (
-                                <div style={{ color: 'var(--error)' }}>Unknown IDs: {computed.unknown.join(', ')}</div>
+                                <div style={styles.unknownIDs}>Unknown IDs: {computed.unknown.join(', ')}</div>
                             )}
                             {computed.warnings.length > 0 && (
                                 <div>
                                     Warnings: {computed.warnings.length}
-                                    <ul style={{ margin: '4px 0 0 16px' }}>
-                                        {computed.warnings.slice(0, 3).map((w, i) => (<li key={i}>{w}</li>))}
-                                        {computed.warnings.length > 3 && <li>…and {computed.warnings.length - 3} more</li>}
+                                    <ul style={styles.warningsList}>
+                                        {(showAllWarnings ? computed.warnings : computed.warnings.slice(0, 3)).map((w, i) => (<li key={i}>{w}</li>))}
+                                        {computed.warnings.length > 3 && (
+                                            <li>
+                                                <button onClick={() => setShowAllWarnings(!showAllWarnings)} style={styles.showMoreButton}>
+                                                    {showAllWarnings ? '…show less' : `…and ${computed.warnings.length - 3} more`}
+                                                </button>
+                                            </li>
+                                        )}
                                     </ul>
                                 </div>
                             )}
@@ -106,16 +118,16 @@ export default function App() {
                 </div>
                 <div className="pane right">
                     <div className="pane-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={styles.paneHeaderContent}>
                             <span>Graph</span>
-                            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={styles.paneHeaderControls}>
                                 <button title="Reset" onClick={() => gvRef.current?.resetZoom()} style={btnStyle}>100%</button>
-                                <span style={{ color: 'var(--muted)', minWidth: 48, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-                                <div style={{ width: 1, height: 16, background: '#1f2937' }} />
+                                <span style={styles.zoomValue}>{Math.round(zoom * 100)}%</span>
+                                <div style={styles.divider} />
                                 <button title="Export SVG" onClick={onExportSVG} style={btnStyle}>SVG</button>
                                 <button title="Export PNG" onClick={onExportPNG} style={btnStyle}>PNG</button>
-                                <div style={{ width: 1, height: 16, background: '#1f2937' }} />
-                                <label htmlFor="rankdir" style={{ color: 'var(--muted)' }}>Direction</label>
+                                <div style={styles.divider} />
+                                <label htmlFor="rankdir" style={styles.directionLabel}>Direction</label>
                                 <select
                                     id="rankdir"
                                     className="select"
@@ -146,13 +158,53 @@ const btnStyle: React.CSSProperties = {
     cursor: 'pointer'
 };
 
-function triggerDownload(url: string, filename: string) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+const styles: Record<string, React.CSSProperties> = {
+    transitionsTextarea: {
+        flex: '0 0 auto',
+        height: 80,
+    },
+    warningsContainer: {
+        padding: '6px 12px',
+        borderTop: '1px solid #1f2937',
+        color: 'var(--muted)',
+    },
+    unknownIDs: {
+        color: 'var(--error)',
+    },
+    warningsList: {
+        margin: '4px 0 0 16px',
+    },
+    paneHeaderContent: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+    },
+    paneHeaderControls: {
+        marginLeft: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+    },
+    zoomValue: {
+        color: 'var(--muted)',
+        minWidth: 48,
+        textAlign: 'center',
+    },
+    divider: {
+        width: 1,
+        height: 16,
+        background: '#1f2937',
+    },
+    directionLabel: {
+        color: 'var(--muted)',
+    },
+    showMoreButton: {
+        background: 'none',
+        border: 'none',
+        color: 'var(--muted)',
+        cursor: 'pointer',
+        padding: 0,
+        textDecoration: 'underline',
+    }
+};
 

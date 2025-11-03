@@ -24,6 +24,7 @@
         ]
     },
     "include": [
-        "src"
+        "src",
+        "src/d3-graphviz.d.ts"
     ]
 }

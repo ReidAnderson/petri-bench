@@ -1,5 +1,5 @@
 import * as d3 from 'd3';
-import 'd3-graphviz';
+import { type Graphviz, graphviz } from 'd3-graphviz';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 type Props = {
@@ -16,21 +16,20 @@ export type GraphvizHandle = {
     exportPNG: () => Promise<Blob | null>;
 };
 
-// Access d3 graphviz extensions through any to avoid type issues
+type D3Selection = d3.Selection<HTMLDivElement, unknown, null, undefined>;
+type GraphvizInstance = Graphviz<HTMLDivElement, unknown, null, undefined>;
 
 export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const gvRef = useRef<GraphvizInstance | null>(null);
     const cbRef = useRef(onZoomChange);
     useEffect(() => { cbRef.current = onZoomChange; }, [onZoomChange]);
 
     useEffect(() => {
         if (!containerRef.current) return;
         const container = containerRef.current;
-
-        // Initialize graphviz instance once per mount
-        const selection = d3.select(container);
-        const anySel: any = selection as any;
-        anySel.graphviz({
+        const selection: D3Selection = d3.select(container);
+        const gv = graphviz(container).options({
             useWorker: false,
             zoom: true,
             fit: true,
@@ -39,6 +38,7 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomCh
             // Support wasm assets from public/wasm; respect Vite base path
             wasmFolder: `${import.meta.env.BASE_URL}wasm`
         });
+        gvRef.current = gv;
 
         return () => {
             // cleanup svg contents
@@ -47,18 +47,15 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomCh
     }, []);
 
     useEffect(() => {
-        if (!containerRef.current) return;
-        const selection = d3.select(containerRef.current);
-        const anySel: any = selection as any;
-        const gv = anySel.graphviz();
-        if (!gv) return;
+        const gv = gvRef.current;
+        if (!gv || !containerRef.current) return;
         gv.renderDot(dot);
         // Attach zoom listener to update scale label
-        const svgSel: any = selection.select('svg');
+        const svgSel = d3.select(containerRef.current).select('svg');
         const update = () => {
-            const node = svgSel?.node?.();
+            const node = svgSel.node();
             if (!node) return;
-            const t = d3.zoomTransform(node as Element);
+            const t = d3.zoomTransform(node);
             if (typeof t?.k === 'number') cbRef.current?.(t.k);
         };
         svgSel.on('zoom.zoomLabel', update);
@@ -68,28 +65,19 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomCh
 
     useImperativeHandle(ref, () => ({
         zoomIn() {
-            if (!containerRef.current) return;
-            const selection = d3.select(containerRef.current) as any;
-            const gv = (selection as any).graphviz?.();
-            if (gv?.zoomScaleBy) gv.zoomScaleBy(selection, 1.2);
+            const gv = gvRef.current;
+            if (gv) (gv as any).zoomScaleBy(d3.select(containerRef.current!), 1.2);
         },
         zoomOut() {
-            if (!containerRef.current) return;
-            const selection = d3.select(containerRef.current) as any;
-            const gv = (selection as any).graphviz?.();
-            if (gv?.zoomScaleBy) gv.zoomScaleBy(selection, 1 / 1.2);
+            const gv = gvRef.current;
+            if (gv) (gv as any).zoomScaleBy(d3.select(containerRef.current!), 1 / 1.2);
         },
         resetZoom() {
-            if (!containerRef.current) return;
-            const selection = d3.select(containerRef.current) as any;
-            const gv = (selection as any).graphviz?.();
-            if (gv?.resetZoom) gv.resetZoom(selection);
+            const gv = gvRef.current;
+            if (gv) (gv as any).resetZoom(d3.select(containerRef.current!));
         },
         fit() {
-            if (!containerRef.current) return;
-            const selection = d3.select(containerRef.current) as any;
-            const gv = (selection as any).graphviz?.();
-            if (gv?.fit) gv.fit();
+            gvRef.current?.fit();
         },
         exportSVG() {
             const svg = containerRef.current?.querySelector('svg');
@@ -99,6 +87,12 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomCh
             const serializer = new XMLSerializer();
             return serializer.serializeToString(clone);
         },
+        /**
+         * Export the current SVG to a PNG blob.
+         * This is done by rendering the SVG to a canvas with a white background,
+         * then exporting the canvas to a PNG blob.
+         * The canvas is scaled by devicePixelRatio for better quality on high-DPI screens.
+         */
         async exportPNG() {
             const svgEl = containerRef.current?.querySelector('svg') as SVGSVGElement | null;
             if (!svgEl) return null;

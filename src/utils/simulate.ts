@@ -79,7 +79,7 @@ export function replayTransitionsDetailed(model: PetriNetInput, sequence: string
 
 function toInt(n: unknown): number { return typeof n === 'number' && isFinite(n) ? Math.trunc(n) : 0; }
 
-function weightOf(arc: Arc): number { return (arc as any).weight && (arc as any).weight !== 0 ? Math.trunc((arc as any).weight as number) : 1; }
+function weightOf(arc: Arc): number { return arc.weight && arc.weight !== 0 ? Math.trunc(arc.weight) : 1; }
 
 function groupInputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<string>): Map<string, Array<{ place: string; weight: number }>> {
     const m = new Map<string, Array<{ place: string; weight: number }>>();
