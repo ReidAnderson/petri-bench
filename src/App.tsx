@@ -15,7 +15,7 @@ function computePetriNet(text: string, transitions: string, rankdir: RankDir) {
         const parsed: PetriNetInput = parsePetriNet(text);
         // parse transitions sequence: accept comma/space/line separated ids or labels
         const refs = transitions
-            .split(/[\,\n\r\t\s]+/)
+            .split(/[\,\n\r\t]+/)
             .map((s) => s.trim())
             .filter(Boolean);
         const resolved = resolveTransitionRefs(parsed, refs);
