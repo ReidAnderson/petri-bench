@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Split from 'react-split';
 import { GraphvizViewer, type GraphvizHandle } from './components/GraphvizViewer';
 import { samplePetriNet } from './sample';
+import { computeAlignmentFitness, findOptimalAlignment } from './utils/alignment';
 import { triggerDownload } from './utils/download';
 import { parsePetriNet } from './utils/parser';
 import { replayTransitionsDetailed } from './utils/simulate';
 import { toDot, type RankDir } from './utils/toDot';
 import { resolveTransitionRefs } from './utils/trace';
-import type { PetriNetInput } from './utils/types';
+import type { AlignmentMove, PetriNetInput } from './utils/types';
 import { useDebounce } from './utils/useDebounce';
 
 function computePetriNet(text: string, transitions: string, rankdir: RankDir) {
@@ -39,6 +40,9 @@ export default function App() {
     const gvRef = useRef<GraphvizHandle | null>(null);
     const [zoom, setZoom] = useState(1);
     const [showAllWarnings, setShowAllWarnings] = useState(false);
+    const [alignMoves, setAlignMoves] = useState<AlignmentMove[] | null>(null);
+    const [alignCost, setAlignCost] = useState<number | null>(null);
+    const [alignFitness, setAlignFitness] = useState<number | null>(null);
 
     const onExportSVG = useCallback(() => {
         const svg = gvRef.current?.exportSVG();
@@ -69,6 +73,27 @@ export default function App() {
         // no-op; dot recomputes via memo
     }, [computed.dot]);
 
+    const onComputeAlignment = useCallback(() => {
+        try {
+            const parsed: PetriNetInput = parsePetriNet(text);
+            // Use raw refs (ids or labels) for alignment matching
+            const refs = transitionsText
+                .split(/[\,\n\r\t]+/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+            const { alignment, cost } = findOptimalAlignment(refs, parsed);
+            const fitness = computeAlignmentFitness(alignment, cost);
+            setAlignMoves(alignment);
+            setAlignCost(cost);
+            setAlignFitness(fitness);
+        } catch (e: any) {
+            setError(e?.message ?? String(e));
+            setAlignMoves(null);
+            setAlignCost(null);
+            setAlignFitness(null);
+        }
+    }, [text, transitionsText]);
+
     return (
         <div className="app-root">
             <Split className="split" sizes={[40, 60]} minSize={200} gutterSize={8}>
@@ -81,7 +106,7 @@ export default function App() {
                         onChange={(e) => setText(e.target.value)}
                         spellCheck={false}
                     />
-                    <div className="pane-header">Transitions (IDs, comma/space separated)</div>
+                    <div className="pane-header">Transitions (IDs or labels, comma/space separated)</div>
                     <textarea
                         className="editor"
                         data-testid="transitions-input"
@@ -91,6 +116,14 @@ export default function App() {
                         spellCheck={false}
                         style={styles.transitionsTextarea}
                     />
+                    <div style={styles.alignmentControls}>
+                        <button onClick={onComputeAlignment} style={btnStyle}>Calculate Alignment</button>
+                        {alignFitness != null && (
+                            <span style={styles.alignmentSummary}>
+                                Cost: <strong>{alignCost}</strong> · Fitness: <strong>{alignFitness.toFixed(3)}</strong>
+                            </span>
+                        )}
+                    </div>
                     {/* Inline hints for transitions */}
                     {(computed.unknown.length > 0 || computed.warnings.length > 0) && (
                         <div style={styles.warningsContainer}>
@@ -112,6 +145,16 @@ export default function App() {
                                     </ul>
                                 </div>
                             )}
+                        </div>
+                    )}
+                    {alignMoves && alignMoves.length > 0 && (
+                        <div style={styles.alignmentContainer}>
+                            <div style={styles.alignmentHeader}>Alignment</div>
+                            <ol style={styles.alignmentList}>
+                                {alignMoves.map((m, i) => (
+                                    <li key={i}><code>{m.moveType}</code>: {m.activity}</li>
+                                ))}
+                            </ol>
                         </div>
                     )}
                     {error && <div className="error">{error}</div>}
@@ -205,6 +248,26 @@ const styles: Record<string, React.CSSProperties> = {
         cursor: 'pointer',
         padding: 0,
         textDecoration: 'underline',
-    }
+    },
+    alignmentControls: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '6px 0',
+    },
+    alignmentSummary: {
+        color: 'var(--muted)'
+    },
+    alignmentContainer: {
+        padding: '6px 12px',
+        borderTop: '1px solid #1f2937',
+    },
+    alignmentHeader: {
+        color: 'var(--muted)',
+        marginBottom: 4,
+    },
+    alignmentList: {
+        margin: '4px 0 0 18px',
+    },
 };
 
