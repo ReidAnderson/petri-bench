@@ -20,3 +20,18 @@ export type PetriNetInput = {
     transitions: Transition[];
     arcs: Arc[];
 };
+
+export type AlignmentMove = {
+    moveType: 'sync' | 'model' | 'log';
+    activity: string;
+}
+
+export type Marking = {
+    [placeId: string]: number;
+}
+
+export type AlignmentState = {
+    marking: Marking;
+    traceIndex: number;
+    cost: number;
+}

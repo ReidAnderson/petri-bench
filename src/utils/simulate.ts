@@ -59,7 +59,8 @@ export function replayTransitionsDetailed(model: PetriNetInput, sequence: string
             if (have < a.weight) { enabled = false; break; }
         }
         if (!enabled) {
-            const msg = `Step ${step + 1}: transition ${tid} not enabled`;
+            const transition = model.transitions.find(t => t.id === tid);
+            const msg = `Step ${step + 1}: transition ${tid} not enabled ${transition?.label ? ` (label='${transition.label}')` : ''}`;
             if (strict) throw new Error(msg);
             warnings.push(msg);
             continue;
