@@ -62,6 +62,13 @@ export default function App() {
     // Undo history of text states (simple stack, last entry is previous state)
     const [history, setHistory] = useState<string[]>([]);
     const maxHistory = 20;
+    // Focus refs for keyboard shortcuts
+    const placeIdRef = useRef<HTMLInputElement | null>(null);
+    const transIdRef = useRef<HTMLInputElement | null>(null);
+    const connPlaceRef = useRef<HTMLSelectElement | null>(null);
+    const connTransRef = useRef<HTMLSelectElement | null>(null);
+    const removePlaceRef = useRef<HTMLSelectElement | null>(null);
+    const removeTransRef = useRef<HTMLSelectElement | null>(null);
 
     const onExportSVG = useCallback(() => {
         const svg = gvRef.current?.exportSVG();
@@ -153,20 +160,55 @@ export default function App() {
             setPlaceId(nextPlaceId(currentModel));
             setPlaceLabel('');
             setPlaceTokens('0');
+            setTimeout(() => placeIdRef.current?.focus(), 0);
         } else if (openPanel === 'transition') {
             setTransId(nextTransitionId(currentModel));
             setTransLabel('');
+            setTimeout(() => transIdRef.current?.focus(), 0);
         } else if (openPanel === 'connect') {
             setConnDir('PT');
             setConnWeight('1');
             setConnPlaceId(currentModel.places[0]?.id ?? '');
             setConnTransId(currentModel.transitions[0]?.id ?? '');
+            setTimeout(() => connPlaceRef.current?.focus(), 0);
         } else if (openPanel === 'removePlace') {
             setConnPlaceId(currentModel.places[0]?.id ?? '');
+            setTimeout(() => removePlaceRef.current?.focus(), 0);
         } else if (openPanel === 'removeTransition') {
             setConnTransId(currentModel.transitions[0]?.id ?? '');
+            setTimeout(() => removeTransRef.current?.focus(), 0);
         }
     }, [openPanel, currentModel]);
+
+    // Keyboard shortcuts: Alt+P (Place), Alt+T (Transition), Alt+C (Connect), Alt+D (Remove Place), Alt+R (Remove Transition)
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            // Avoid interfering with text entry when Ctrl/Meta present
+            if (!e.altKey || e.ctrlKey || e.metaKey) return;
+            const k = e.key.toLowerCase();
+            if (k === 'p') {
+                e.preventDefault();
+                setOpenPanel('place');
+            } else if (k === 't') {
+                e.preventDefault();
+                setOpenPanel('transition');
+            } else if (k === 'c') {
+                e.preventDefault();
+                setOpenPanel('connect');
+            } else if (k === 'd') {
+                e.preventDefault();
+                setOpenPanel('removePlace');
+            } else if (k === 'r') {
+                e.preventDefault();
+                setOpenPanel('removeTransition');
+            } else if (k === 'z') {
+                e.preventDefault();
+                onUndo();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
 
     const onConvertPNMLToJSON = useCallback(() => {
         try {
@@ -315,13 +357,19 @@ export default function App() {
                                 <button style={btnStyle} onClick={onUndo} disabled={history.length === 0} title={history.length ? `Undo (${history.length})` : 'Undo'}>Undo</button>
                             </div>
                         )}
+                        {currentModel && (
+                            <div style={styles.shortcutHints}>
+                                <span style={styles.shortcutHintLabel}>Shortcuts:</span>
+                                <code>Alt+P</code> Place · <code>Alt+T</code> Transition · <code>Alt+C</code> Connect · <code>Alt+D</code> Remove Place · <code>Alt+R</code> Remove Transition · <code>Alt+Z</code> Undo
+                            </div>
+                        )}
 
                         {/* Inline forms */}
                         {currentModel && openPanel === 'place' && (
                             <div style={styles.formCard}>
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>ID</label>
-                                    <input value={placeId} onChange={(e) => setPlaceId(e.target.value)} style={styles.input} />
+                                    <input ref={placeIdRef} value={placeId} onChange={(e) => setPlaceId(e.target.value)} style={styles.input} />
                                 </div>
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>Label</label>
@@ -341,7 +389,7 @@ export default function App() {
                             <div style={styles.formCard}>
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>ID</label>
-                                    <input value={transId} onChange={(e) => setTransId(e.target.value)} style={styles.input} />
+                                    <input ref={transIdRef} value={transId} onChange={(e) => setTransId(e.target.value)} style={styles.input} />
                                 </div>
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>Label</label>
@@ -358,26 +406,53 @@ export default function App() {
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>Direction</label>
                                     <div style={{ display: 'flex', gap: 8 }}>
-                                        <label><input type="radio" checked={connDir === 'PT'} onChange={() => setConnDir('PT')} /> P → T</label>
-                                        <label><input type="radio" checked={connDir === 'TP'} onChange={() => setConnDir('TP')} /> T → P</label>
+                                        <label><input type="radio" checked={connDir === 'PT'} name="direction" onChange={() => { setConnDir('PT'); setTimeout(()=> connPlaceRef.current?.focus(),0); }} /> P → T</label>
+                                        <label><input type="radio" checked={connDir === 'TP'} name="direction" onChange={() => { setConnDir('TP'); setTimeout(()=> connTransRef.current?.focus(),0); }} /> T → P</label>
                                     </div>
                                 </div>
-                                <div style={styles.formRow}>
-                                    <label style={styles.formLabel}>Place</label>
-                                    <select value={connPlaceId} onChange={(e) => setConnPlaceId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
-                                        {currentModel.places.map(p => (
-                                            <option key={p.id} value={p.id}>{p.label ? `${p.label} (${p.id})` : p.id}</option>
-                                        ))}
-                                    </select>
+                                {/* Arc preview */}
+                                <div style={styles.arcPreview}>
+                                    <strong>Arc:</strong> {connDir === 'PT' ? connPlaceId || '—' : connTransId || '—'} → {connDir === 'PT' ? connTransId || '—' : connPlaceId || '—'}
                                 </div>
-                                <div style={styles.formRow}>
-                                    <label style={styles.formLabel}>Transition</label>
-                                    <select value={connTransId} onChange={(e) => setConnTransId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
-                                        {currentModel.transitions.map(t => (
-                                            <option key={t.id} value={t.id}>{t.label ? `${t.label} (${t.id})` : t.id}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                {connDir === 'PT' ? (
+                                    <>
+                                        <div style={styles.formRow}>
+                                            <label style={styles.formLabel}>Source Place</label>
+                                            <select ref={connPlaceRef} value={connPlaceId} onChange={(e) => setConnPlaceId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                                {currentModel.places.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.label ? `${p.label} (${p.id})` : p.id}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div style={styles.formRow}>
+                                            <label style={styles.formLabel}>Target Transition</label>
+                                            <select ref={connTransRef} value={connTransId} onChange={(e) => setConnTransId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                                {currentModel.transitions.map(t => (
+                                                    <option key={t.id} value={t.id}>{t.label ? `${t.label} (${t.id})` : t.id}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div style={styles.formRow}>
+                                            <label style={styles.formLabel}>Source Transition</label>
+                                            <select ref={connTransRef} value={connTransId} onChange={(e) => setConnTransId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                                {currentModel.transitions.map(t => (
+                                                    <option key={t.id} value={t.id}>{t.label ? `${t.label} (${t.id})` : t.id}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div style={styles.formRow}>
+                                            <label style={styles.formLabel}>Target Place</label>
+                                            <select ref={connPlaceRef} value={connPlaceId} onChange={(e) => setConnPlaceId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                                {currentModel.places.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.label ? `${p.label} (${p.id})` : p.id}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </>
+                                )}
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>Weight</label>
                                     <input value={connWeight} onChange={(e) => setConnWeight(e.target.value)} style={{ ...styles.input, width: 80 }} inputMode="numeric" />
@@ -392,7 +467,7 @@ export default function App() {
                             <div style={styles.formCard}>
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>Place</label>
-                                    <select value={connPlaceId} onChange={(e) => setConnPlaceId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                    <select ref={removePlaceRef} value={connPlaceId} onChange={(e) => setConnPlaceId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
                                         {currentModel.places.map(p => (
                                             <option key={p.id} value={p.id}>{p.label ? `${p.label} (${p.id})` : p.id}</option>
                                         ))}
@@ -408,7 +483,7 @@ export default function App() {
                             <div style={styles.formCard}>
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>Transition</label>
-                                    <select value={connTransId} onChange={(e) => setConnTransId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                    <select ref={removeTransRef} value={connTransId} onChange={(e) => setConnTransId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
                                         {currentModel.transitions.map(t => (
                                             <option key={t.id} value={t.id}>{t.label ? `${t.label} (${t.id})` : t.id}</option>
                                         ))}
@@ -639,6 +714,27 @@ const styles: Record<string, React.CSSProperties> = {
     },
     alignmentList: {
         margin: '4px 0 0 18px',
+    },
+    arcPreview: {
+        marginTop: 6,
+        padding: '4px 6px',
+        background: '#0b1228',
+        border: '1px solid #1f2937',
+        borderRadius: 4,
+        fontSize: 12,
+        color: 'var(--muted)'
+    },
+    shortcutHints: {
+        marginTop: 4,
+        fontSize: 11,
+        color: 'var(--muted)',
+        display: 'flex',
+        gap: 6,
+        flexWrap: 'wrap'
+    },
+    shortcutHintLabel: {
+        fontWeight: 600,
+        color: 'var(--muted)'
     },
 };
 
