@@ -44,6 +44,25 @@ export default function App() {
     const [alignCost, setAlignCost] = useState<number | null>(null);
     const [alignFitness, setAlignFitness] = useState<number | null>(null);
 
+    // Quick-add toolbar state
+    type EditPanel = 'none' | 'place' | 'transition' | 'connect' | 'removePlace' | 'removeTransition';
+    const [openPanel, setOpenPanel] = useState<EditPanel>('none');
+    // Add Place form
+    const [placeId, setPlaceId] = useState('');
+    const [placeLabel, setPlaceLabel] = useState('');
+    const [placeTokens, setPlaceTokens] = useState<string>('0');
+    // Add Transition form
+    const [transId, setTransId] = useState('');
+    const [transLabel, setTransLabel] = useState('');
+    // Connect form
+    const [connDir, setConnDir] = useState<'PT' | 'TP'>('PT');
+    const [connPlaceId, setConnPlaceId] = useState('');
+    const [connTransId, setConnTransId] = useState('');
+    const [connWeight, setConnWeight] = useState<string>('1');
+    // Undo history of text states (simple stack, last entry is previous state)
+    const [history, setHistory] = useState<string[]>([]);
+    const maxHistory = 20;
+
     const onExportSVG = useCallback(() => {
         const svg = gvRef.current?.exportSVG();
         if (!svg) return;
@@ -94,10 +113,314 @@ export default function App() {
         }
     }, [text, transitionsText]);
 
+    // --- Editing helpers ---
+    const isPNML = useMemo(() => {
+        const trimmed = text.trim();
+        return trimmed.startsWith('<') || /<\s*pnml[\s>]/i.test(trimmed);
+    }, [text]);
+
+    const tryParseModel = useCallback((t: string): PetriNetInput | null => {
+        try {
+            return parsePetriNet(t);
+        } catch {
+            return null;
+        }
+    }, []);
+
+    const currentModel = useMemo(() => tryParseModel(text), [text, tryParseModel]);
+
+    const stringifyModel = (m: PetriNetInput) => JSON.stringify(m, null, 2);
+
+    const nextPlaceId = (m: PetriNetInput) => {
+        const base = 'P';
+        const used = new Set(m.places.map(p => p.id));
+        let n = 0;
+        while (used.has(`${base}${n}`)) n++;
+        return `${base}${n}`;
+    };
+    const nextTransitionId = (m: PetriNetInput) => {
+        const base = 'T';
+        const used = new Set(m.transitions.map(p => p.id));
+        let n = 0;
+        while (used.has(`${base}${n}`)) n++;
+        return `${base}${n}`;
+    };
+
+    // Reset and prefill forms when panel opens or model changes
+    useEffect(() => {
+        if (!currentModel) return;
+        if (openPanel === 'place') {
+            setPlaceId(nextPlaceId(currentModel));
+            setPlaceLabel('');
+            setPlaceTokens('0');
+        } else if (openPanel === 'transition') {
+            setTransId(nextTransitionId(currentModel));
+            setTransLabel('');
+        } else if (openPanel === 'connect') {
+            setConnDir('PT');
+            setConnWeight('1');
+            setConnPlaceId(currentModel.places[0]?.id ?? '');
+            setConnTransId(currentModel.transitions[0]?.id ?? '');
+        } else if (openPanel === 'removePlace') {
+            setConnPlaceId(currentModel.places[0]?.id ?? '');
+        } else if (openPanel === 'removeTransition') {
+            setConnTransId(currentModel.transitions[0]?.id ?? '');
+        }
+    }, [openPanel, currentModel]);
+
+    const onConvertPNMLToJSON = useCallback(() => {
+        try {
+            const model = parsePetriNet(text);
+            setText(stringifyModel(model));
+            setError(null);
+        } catch (e: any) {
+            setError(e?.message ?? String(e));
+        }
+    }, [text]);
+
+    const submitAddPlace = useCallback(() => {
+        if (!currentModel) return;
+        const id = placeId.trim();
+        if (!id) { setError('Place id is required.'); return; }
+        if (currentModel.places.some(p => p.id === id) || currentModel.transitions.some(t => t.id === id)) {
+            setError(`ID already exists: ${id}`);
+            return;
+        }
+        const tokens = Math.max(0, Number.isFinite(Number(placeTokens)) ? Number(placeTokens) : 0);
+        const place: any = { id };
+        if (placeLabel.trim()) place.label = placeLabel.trim();
+        if (tokens > 0) place.tokens = tokens;
+        const model: PetriNetInput = {
+            places: [...currentModel.places, place],
+            transitions: currentModel.transitions.slice(),
+            arcs: currentModel.arcs.slice(),
+        };
+        // push current text to history before mutating
+        setHistory(h => (h.length >= maxHistory ? [...h.slice(1), text] : [...h, text]));
+        setText(stringifyModel(model));
+        // Open connect with preselected place
+        setOpenPanel('connect');
+        setConnDir('PT');
+        setConnPlaceId(id);
+        setConnTransId(currentModel.transitions[0]?.id ?? '');
+        setError(null);
+    }, [currentModel, placeId, placeLabel, placeTokens]);
+
+    const submitAddTransition = useCallback(() => {
+        if (!currentModel) return;
+        const id = transId.trim();
+        if (!id) { setError('Transition id is required.'); return; }
+        if (currentModel.places.some(p => p.id === id) || currentModel.transitions.some(t => t.id === id)) {
+            setError(`ID already exists: ${id}`);
+            return;
+        }
+        const t: any = { id };
+        if (transLabel.trim()) t.label = transLabel.trim();
+        const model: PetriNetInput = {
+            places: currentModel.places.slice(),
+            transitions: [...currentModel.transitions, t],
+            arcs: currentModel.arcs.slice(),
+        };
+        // push current text to history before mutating
+        setHistory(h => (h.length >= maxHistory ? [...h.slice(1), text] : [...h, text]));
+        setText(stringifyModel(model));
+        // Open connect with preselected transition
+        setOpenPanel('connect');
+        setConnDir('TP');
+        setConnTransId(id);
+        setConnPlaceId(currentModel.places[0]?.id ?? '');
+        setError(null);
+    }, [currentModel, transId, transLabel]);
+
+    const submitConnect = useCallback(() => {
+        if (!currentModel) return;
+        const pId = connPlaceId.trim();
+        const tId = connTransId.trim();
+        if (!pId || !tId) { setError('Select a place and a transition.'); return; }
+        const weightVal = Math.max(1, Number.isFinite(Number(connWeight)) ? Number(connWeight) : 1);
+        const from = connDir === 'PT' ? pId : tId;
+        const to = connDir === 'PT' ? tId : pId;
+        // Prevent duplicate exact same arc (same from,to)
+        const exists = currentModel.arcs.some(a => a.from === from && a.to === to);
+        if (exists) {
+            setError('Arc already exists.');
+            return;
+        }
+        const newArc: any = { from, to };
+        if (weightVal > 1) newArc.weight = weightVal;
+        const model: PetriNetInput = {
+            places: currentModel.places.slice(),
+            transitions: currentModel.transitions.slice(),
+            arcs: [...currentModel.arcs, newArc],
+        };
+        // push current text to history before mutating
+        setHistory(h => (h.length >= maxHistory ? [...h.slice(1), text] : [...h, text]));
+        setText(stringifyModel(model));
+        setOpenPanel('none');
+        setError(null);
+    }, [currentModel, connDir, connPlaceId, connTransId, connWeight, text]);
+
+    const onUndo = useCallback(() => {
+        setHistory(h => {
+            if (h.length === 0) return h;
+            const prev = h[h.length - 1];
+            setText(prev);
+            setOpenPanel('none');
+            setError(null);
+            return h.slice(0, -1);
+        });
+    }, []);
+
+    const submitRemove = useCallback((kind: 'place' | 'transition', id: string) => {
+        if (!currentModel) return;
+        const targetId = id.trim();
+        if (!targetId) { setError('Select an item to remove.'); return; }
+        const hasTarget = kind === 'place'
+            ? currentModel.places.some(p => p.id === targetId)
+            : currentModel.transitions.some(t => t.id === targetId);
+        if (!hasTarget) { setError(`${kind} not found: ${targetId}`); return; }
+        const nextModel: PetriNetInput = {
+            places: kind === 'place' ? currentModel.places.filter(p => p.id !== targetId) : currentModel.places.slice(),
+            transitions: kind === 'transition' ? currentModel.transitions.filter(t => t.id !== targetId) : currentModel.transitions.slice(),
+            arcs: currentModel.arcs.filter(a => a.from !== targetId && a.to !== targetId),
+        };
+        // push current text to history before mutating
+        setHistory(h => (h.length >= maxHistory ? [...h.slice(1), text] : [...h, text]));
+        setText(stringifyModel(nextModel));
+        setOpenPanel('none');
+        setError(null);
+    }, [currentModel, text]);
+
     return (
         <div className="app-root">
             <Split className="split" sizes={[40, 60]} minSize={200} gutterSize={8}>
                 <div className="pane left">
+                    <div style={styles.toolbarContainer}>
+                        <div style={styles.toolbarHeader}>Edit</div>
+                        {isPNML ? (
+                            <div style={styles.convertHint}>
+                                Editing is available for JSON nets. Convert PNML to JSON?
+                                <button onClick={onConvertPNMLToJSON} style={{ ...btnStyle, marginLeft: 8 }}>Convert</button>
+                            </div>
+                        ) : !currentModel ? (
+                            <div style={styles.convertHint}>Fix input errors to enable editing.</div>
+                        ) : (
+                            <div style={styles.toolbarButtons}>
+                                <button style={btnStyle} onClick={() => setOpenPanel(openPanel === 'place' ? 'none' : 'place')}>+ Place</button>
+                                <button style={btnStyle} onClick={() => setOpenPanel(openPanel === 'transition' ? 'none' : 'transition')}>+ Transition</button>
+                                <button style={btnStyle} onClick={() => setOpenPanel(openPanel === 'connect' ? 'none' : 'connect')}>Connect</button>
+                                <button style={btnStyle} onClick={() => setOpenPanel(openPanel === 'removePlace' ? 'none' : 'removePlace')}>Remove Place</button>
+                                <button style={btnStyle} onClick={() => setOpenPanel(openPanel === 'removeTransition' ? 'none' : 'removeTransition')}>Remove Transition</button>
+                                <div style={{ marginLeft: 'auto' }} />
+                                <button style={btnStyle} onClick={onUndo} disabled={history.length === 0} title={history.length ? `Undo (${history.length})` : 'Undo'}>Undo</button>
+                            </div>
+                        )}
+
+                        {/* Inline forms */}
+                        {currentModel && openPanel === 'place' && (
+                            <div style={styles.formCard}>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>ID</label>
+                                    <input value={placeId} onChange={(e) => setPlaceId(e.target.value)} style={styles.input} />
+                                </div>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Label</label>
+                                    <input value={placeLabel} onChange={(e) => setPlaceLabel(e.target.value)} style={styles.input} />
+                                </div>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Tokens</label>
+                                    <input value={placeTokens} onChange={(e) => setPlaceTokens(e.target.value)} style={{ ...styles.input, width: 80 }} inputMode="numeric" />
+                                </div>
+                                <div style={styles.formActions}>
+                                    <button style={btnStyle} onClick={submitAddPlace}>Add</button>
+                                    <button style={btnStyle} onClick={() => setOpenPanel('none')}>Cancel</button>
+                                </div>
+                            </div>
+                        )}
+                        {currentModel && openPanel === 'transition' && (
+                            <div style={styles.formCard}>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>ID</label>
+                                    <input value={transId} onChange={(e) => setTransId(e.target.value)} style={styles.input} />
+                                </div>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Label</label>
+                                    <input value={transLabel} onChange={(e) => setTransLabel(e.target.value)} style={styles.input} />
+                                </div>
+                                <div style={styles.formActions}>
+                                    <button style={btnStyle} onClick={submitAddTransition}>Add</button>
+                                    <button style={btnStyle} onClick={() => setOpenPanel('none')}>Cancel</button>
+                                </div>
+                            </div>
+                        )}
+                        {currentModel && openPanel === 'connect' && (
+                            <div style={styles.formCard}>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Direction</label>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <label><input type="radio" checked={connDir === 'PT'} onChange={() => setConnDir('PT')} /> P → T</label>
+                                        <label><input type="radio" checked={connDir === 'TP'} onChange={() => setConnDir('TP')} /> T → P</label>
+                                    </div>
+                                </div>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Place</label>
+                                    <select value={connPlaceId} onChange={(e) => setConnPlaceId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                        {currentModel.places.map(p => (
+                                            <option key={p.id} value={p.id}>{p.label ? `${p.label} (${p.id})` : p.id}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Transition</label>
+                                    <select value={connTransId} onChange={(e) => setConnTransId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                        {currentModel.transitions.map(t => (
+                                            <option key={t.id} value={t.id}>{t.label ? `${t.label} (${t.id})` : t.id}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Weight</label>
+                                    <input value={connWeight} onChange={(e) => setConnWeight(e.target.value)} style={{ ...styles.input, width: 80 }} inputMode="numeric" />
+                                </div>
+                                <div style={styles.formActions}>
+                                    <button style={btnStyle} onClick={submitConnect}>Add</button>
+                                    <button style={btnStyle} onClick={() => setOpenPanel('none')}>Cancel</button>
+                                </div>
+                            </div>
+                        )}
+                        {currentModel && openPanel === 'removePlace' && (
+                            <div style={styles.formCard}>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Place</label>
+                                    <select value={connPlaceId} onChange={(e) => setConnPlaceId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                        {currentModel.places.map(p => (
+                                            <option key={p.id} value={p.id}>{p.label ? `${p.label} (${p.id})` : p.id}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={styles.formActions}>
+                                    <button style={btnStyle} onClick={() => submitRemove('place', connPlaceId)}>Remove</button>
+                                    <button style={btnStyle} onClick={() => setOpenPanel('none')}>Cancel</button>
+                                </div>
+                            </div>
+                        )}
+                        {currentModel && openPanel === 'removeTransition' && (
+                            <div style={styles.formCard}>
+                                <div style={styles.formRow}>
+                                    <label style={styles.formLabel}>Transition</label>
+                                    <select value={connTransId} onChange={(e) => setConnTransId(e.target.value)} style={{ ...styles.input, padding: '6px 8px', fontSize: 14 }}>
+                                        {currentModel.transitions.map(t => (
+                                            <option key={t.id} value={t.id}>{t.label ? `${t.label} (${t.id})` : t.id}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={styles.formActions}>
+                                    <button style={btnStyle} onClick={() => submitRemove('transition', connTransId)}>Remove</button>
+                                    <button style={btnStyle} onClick={() => setOpenPanel('none')}>Cancel</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     <div className="pane-header">Petri net (JSON or PNML)</div>
                     <textarea
                         className="editor"
@@ -202,6 +525,54 @@ const btnStyle: React.CSSProperties = {
 };
 
 const styles: Record<string, React.CSSProperties> = {
+    toolbarContainer: {
+        padding: '6px 12px',
+        borderBottom: '1px solid #1f2937',
+    },
+    toolbarHeader: {
+        color: 'var(--muted)'
+    },
+    toolbarButtons: {
+        display: 'flex',
+        gap: 8,
+        marginTop: 6,
+        flexWrap: 'wrap'
+    },
+    convertHint: {
+        marginTop: 6,
+        color: 'var(--muted)'
+    },
+    formCard: {
+        marginTop: 8,
+        padding: 8,
+        border: '1px solid #1f2937',
+        borderRadius: 6,
+        background: '#0b1228',
+    },
+    formRow: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 6,
+    },
+    formLabel: {
+        width: 88,
+        color: 'var(--muted)'
+    },
+    input: {
+        flex: '1 1 auto',
+        background: 'transparent',
+        border: '1px solid #1f2937',
+        color: 'var(--text)',
+        padding: '4px 6px',
+        borderRadius: 4,
+    },
+    formActions: {
+        display: 'flex',
+        gap: 8,
+        marginTop: 8,
+        justifyContent: 'flex-end'
+    },
     transitionsTextarea: {
         flex: '0 0 auto',
         height: 80,
