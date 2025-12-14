@@ -10,6 +10,7 @@ import { toDot, type RankDir } from './utils/toDot';
 import { resolveTransitionRefs } from './utils/trace';
 import type { AlignmentMove, PetriNetInput } from './utils/types';
 import { useDebounce } from './utils/useDebounce';
+import { applyJSONata } from './utils/jsonata';
 
 function computePetriNet(text: string, transitions: string, rankdir: RankDir) {
     try {
@@ -32,6 +33,22 @@ function computePetriNet(text: string, transitions: string, rankdir: RankDir) {
     }
 }
 
+function applyImportTransformIfNeeded(text: string, expr: string): string {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('<') || /<\s*pnml[\s>]/i.test(trimmed)) return text;
+    try {
+        const obj = JSON.parse(text);
+        const transformed = applyJSONata(obj, expr);
+        return JSON.stringify(transformed ?? obj);
+    } catch {
+        return text;
+    }
+}
+
+function applyExportTransform(model: PetriNetInput, expr: string): unknown {
+    return applyJSONata(model, expr);
+}
+
 export default function App() {
     const [text, setText] = useState<string>(JSON.stringify(samplePetriNet, null, 2));
     const [error, setError] = useState<string | null>(null);
@@ -43,6 +60,11 @@ export default function App() {
     const [alignMoves, setAlignMoves] = useState<AlignmentMove[] | null>(null);
     const [alignCost, setAlignCost] = useState<number | null>(null);
     const [alignFitness, setAlignFitness] = useState<number | null>(null);
+
+    // JSONata transforms
+    const [importExpr, setImportExpr] = useState<string>('');
+    const [exportExpr, setExportExpr] = useState<string>('');
+    const [showJsonataPanel, setShowJsonataPanel] = useState<boolean>(true);
 
     // Quick-add toolbar state
     type EditPanel = 'none' | 'place' | 'transition' | 'connect' | 'removePlace' | 'removeTransition';
@@ -101,7 +123,7 @@ export default function App() {
 
     const onComputeAlignment = useCallback(() => {
         try {
-            const parsed: PetriNetInput = parsePetriNet(text);
+            const parsed: PetriNetInput = parsePetriNet(applyImportTransformIfNeeded(text, importExpr));
             // Use raw refs (ids or labels) for alignment matching
             const refs = transitionsText
                 .split(/[\,\n\r\t]+/)
@@ -128,15 +150,28 @@ export default function App() {
 
     const tryParseModel = useCallback((t: string): PetriNetInput | null => {
         try {
-            return parsePetriNet(t);
+            return parsePetriNet(applyImportTransformIfNeeded(t, importExpr));
         } catch {
             return null;
         }
-    }, []);
+    }, [importExpr]);
 
     const currentModel = useMemo(() => tryParseModel(text), [text, tryParseModel]);
 
     const stringifyModel = (m: PetriNetInput) => JSON.stringify(m, null, 2);
+
+    const onExportTransformedJSON = useCallback(() => {
+        if (!currentModel) return;
+        try {
+            const transformed = applyExportTransform(currentModel, exportExpr);
+            const json = JSON.stringify(transformed, null, 2);
+            const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            triggerDownload(url, 'petri-net-transformed.json');
+        } catch (e: any) {
+            setError(e?.message ?? String(e));
+        }
+    }, [currentModel, exportExpr]);
 
     const nextPlaceId = (m: PetriNetInput) => {
         const base = 'P';
@@ -339,6 +374,44 @@ export default function App() {
                 <div className="pane left">
                     <div style={styles.toolbarContainer}>
                         <div style={styles.toolbarHeader}>Edit</div>
+                        {/* JSONata transform section */}
+                        <div style={styles.formCard}>
+                            <div style={styles.formRow}>
+                                <div style={{ ...styles.formLabel, flex: '0 0 auto' }}>JSONata</div>
+                                <button
+                                    style={btnStyle}
+                                    onClick={() => setShowJsonataPanel(s => !s)}
+                                    aria-expanded={showJsonataPanel}
+                                >{showJsonataPanel ? 'Hide' : 'Show'}</button>
+                            </div>
+                            {showJsonataPanel && (
+                                <>
+                                    <div style={styles.formRow}>
+                                        <div style={styles.formLabel}>Import JSONata</div>
+                                        <textarea
+                                            value={importExpr}
+                                            onChange={(e) => setImportExpr(e.target.value)}
+                                            placeholder="Expression to convert external JSON → internal PetriNetInput"
+                                            style={{ ...styles.input, height: 60 }}
+                                            spellCheck={false}
+                                        />
+                                    </div>
+                                    <div style={styles.formRow}>
+                                        <div style={styles.formLabel}>Export JSONata</div>
+                                        <textarea
+                                            value={exportExpr}
+                                            onChange={(e) => setExportExpr(e.target.value)}
+                                            placeholder="Expression to convert internal PetriNetInput → external JSON"
+                                            style={{ ...styles.input, height: 60 }}
+                                            spellCheck={false}
+                                        />
+                                    </div>
+                                    <div style={styles.formActions}>
+                                        <button onClick={onExportTransformedJSON} style={btnStyle}>Export Transformed JSON</button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                         {isPNML ? (
                             <div style={styles.convertHint}>
                                 Editing is available for JSON nets. Convert PNML to JSON?
@@ -406,8 +479,8 @@ export default function App() {
                                 <div style={styles.formRow}>
                                     <label style={styles.formLabel}>Direction</label>
                                     <div style={{ display: 'flex', gap: 8 }}>
-                                        <label><input type="radio" checked={connDir === 'PT'} name="direction" onChange={() => { setConnDir('PT'); setTimeout(()=> connPlaceRef.current?.focus(),0); }} /> P → T</label>
-                                        <label><input type="radio" checked={connDir === 'TP'} name="direction" onChange={() => { setConnDir('TP'); setTimeout(()=> connTransRef.current?.focus(),0); }} /> T → P</label>
+                                        <label><input type="radio" checked={connDir === 'PT'} name="direction" onChange={() => { setConnDir('PT'); setTimeout(() => connPlaceRef.current?.focus(), 0); }} /> P → T</label>
+                                        <label><input type="radio" checked={connDir === 'TP'} name="direction" onChange={() => { setConnDir('TP'); setTimeout(() => connTransRef.current?.focus(), 0); }} /> T → P</label>
                                     </div>
                                 </div>
                                 {/* Arc preview */}
