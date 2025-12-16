@@ -5,6 +5,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 type Props = {
     dot: string;
     onZoomChange?: (k: number) => void;
+    onTransitionClick?: (id: string) => void;
 };
 
 export type GraphvizHandle = {
@@ -19,11 +20,13 @@ export type GraphvizHandle = {
 type D3Selection = d3.Selection<HTMLDivElement, unknown, null, undefined>;
 type GraphvizInstance = Graphviz<HTMLDivElement, unknown, null, undefined>;
 
-export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomChange }, ref) => {
+export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomChange, onTransitionClick }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const gvRef = useRef<GraphvizInstance | null>(null);
     const cbRef = useRef(onZoomChange);
     useEffect(() => { cbRef.current = onZoomChange; }, [onZoomChange]);
+    const transitionCbRef = useRef(onTransitionClick);
+    useEffect(() => { transitionCbRef.current = onTransitionClick; }, [onTransitionClick]);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -61,6 +64,23 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomCh
         svgSel.on('zoom.zoomLabel', update);
         // Update once after render
         setTimeout(update, 0);
+
+        // Delegate click from the SVG root to avoid multiple handlers per node
+        // Clear any previous click handler in this namespace, then attach one
+        svgSel.on('click.transitionClick', null);
+        svgSel.on('click.transitionClick', (event: any) => {
+            const target = event.target as Element | null;
+            if (!target) return;
+            const g = target.closest('g.node');
+            if (!g) return;
+            const hasEllipse = !!g.querySelector('ellipse');
+            const hasPolygon = !!g.querySelector('polygon');
+            if (hasPolygon && !hasEllipse) {
+                const title = g.querySelector('title')?.textContent?.trim();
+                if (title) transitionCbRef.current?.(title);
+                event.stopPropagation();
+            }
+        });
     }, [dot]);
 
     useImperativeHandle(ref, () => ({
