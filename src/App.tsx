@@ -4,13 +4,13 @@ import { GraphvizViewer, type GraphvizHandle } from './components/GraphvizViewer
 import { samplePetriNet } from './sample';
 import { computeAlignmentFitness, findOptimalAlignment } from './utils/alignment';
 import { triggerDownload } from './utils/download';
+import { applyJSONata } from './utils/jsonata';
 import { parsePetriNet } from './utils/parser';
 import { replayTransitionsDetailed } from './utils/simulate';
 import { toDot, type RankDir } from './utils/toDot';
 import { resolveTransitionRefs } from './utils/trace';
 import type { AlignmentMove, PetriNetInput } from './utils/types';
 import { useDebounce } from './utils/useDebounce';
-import { applyJSONata } from './utils/jsonata';
 
 function computePetriNet(text: string, transitions: string, rankdir: RankDir) {
     try {
@@ -656,7 +656,12 @@ export default function App() {
                             </div>
                         </div>
                     </div>
-                    <GraphvizViewer ref={gvRef} dot={computed.dot} onZoomChange={setZoom} />
+                    <GraphvizViewer
+                        ref={gvRef}
+                        dot={computed.dot}
+                        onZoomChange={setZoom}
+                        onTransitionClick={(id) => setTransitionsText((prev) => prev ? `${prev}, ${id}` : id)}
+                    />
                 </div>
             </Split>
         </div>
