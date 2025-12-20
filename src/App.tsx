@@ -4,17 +4,20 @@ import { GraphvizViewer, type GraphvizHandle } from './components/GraphvizViewer
 import { samplePetriNet } from './sample';
 import { computeAlignmentFitness, findOptimalAlignment } from './utils/alignment';
 import { triggerDownload } from './utils/download';
-import { applyJSONata } from './utils/jsonata';
-import { parsePetriNet } from './utils/parser';
+import { parsePetriNetByFormat } from './utils/parser';
 import { replayTransitionsDetailed } from './utils/simulate';
 import { toDot, type RankDir } from './utils/toDot';
+import { toMermaid } from './utils/toMermaid';
+import { toPNML } from './utils/toPNML';
 import { resolveTransitionRefs } from './utils/trace';
 import type { AlignmentMove, PetriNetInput } from './utils/types';
 import { useDebounce } from './utils/useDebounce';
 
-function computePetriNet(text: string, transitions: string, rankdir: RankDir) {
+type DataFormat = 'json' | 'pnml' | 'dot' | 'mermaid';
+
+function computePetriNet(text: string, transitions: string, rankdir: RankDir, inputFormat: DataFormat) {
     try {
-        const parsed: PetriNetInput = parsePetriNet(text);
+        const parsed: PetriNetInput = parsePetriNetByFormat(text, inputFormat);
         // parse transitions sequence: accept comma/space/line separated ids or labels
         const refs = transitions
             .split(/[\,\n\r\t]+/)
@@ -27,26 +30,10 @@ function computePetriNet(text: string, transitions: string, rankdir: RankDir) {
         const totalWarnings = [...resolved.warnings, ...res.warnings];
         const label = refs.length ? `Applied: ${refs.join(' → ')}${totalWarnings.length ? `\n(${totalWarnings.length} warning${totalWarnings.length > 1 ? 's' : ''})` : ''}` : undefined;
         const dot = toDot(res.model, { rankdir, label });
-        return { dot, unknown: resolved.unknown, warnings: totalWarnings, error: null as string | null };
+        return { dot, model: res.model, unknown: resolved.unknown, warnings: totalWarnings, error: null as string | null };
     } catch (e: any) {
-        return { dot: 'digraph G { label="Invalid input" }', unknown: [] as string[], warnings: [] as string[], error: e?.message ?? String(e) };
+        return { dot: 'digraph G { label="Invalid input" }', model: null as any, unknown: [] as string[], warnings: [] as string[], error: e?.message ?? String(e) };
     }
-}
-
-function applyImportTransformIfNeeded(text: string, expr: string): string {
-    const trimmed = text.trim();
-    if (trimmed.startsWith('<') || /<\s*pnml[\s>]/i.test(trimmed)) return text;
-    try {
-        const obj = JSON.parse(text);
-        const transformed = applyJSONata(obj, expr);
-        return JSON.stringify(transformed ?? obj);
-    } catch {
-        return text;
-    }
-}
-
-function applyExportTransform(model: PetriNetInput, expr: string): unknown {
-    return applyJSONata(model, expr);
 }
 
 export default function App() {
@@ -54,6 +41,8 @@ export default function App() {
     const [error, setError] = useState<string | null>(null);
     const [transitionsText, setTransitionsText] = useState<string>("T0, T1");
     const [rankdir, setRankdir] = useState<RankDir>('TB');
+    const [inputFormat, setInputFormat] = useState<DataFormat>('json');
+    const [viewFormat, setViewFormat] = useState<DataFormat>('json');
     const gvRef = useRef<GraphvizHandle | null>(null);
     const [zoom, setZoom] = useState(1);
     const [showAllWarnings, setShowAllWarnings] = useState(false);
@@ -61,10 +50,7 @@ export default function App() {
     const [alignCost, setAlignCost] = useState<number | null>(null);
     const [alignFitness, setAlignFitness] = useState<number | null>(null);
 
-    // JSONata transforms
-    const [importExpr, setImportExpr] = useState<string>('');
-    const [exportExpr, setExportExpr] = useState<string>('');
-    const [showJsonataPanel, setShowJsonataPanel] = useState<boolean>(true);
+    // Formatting panel state (input/view)
 
     // Quick-add toolbar state
     type EditPanel = 'none' | 'place' | 'transition' | 'connect' | 'removePlace' | 'removeTransition';
@@ -110,8 +96,24 @@ export default function App() {
     const debouncedText = useDebounce(text, 300);
     const debouncedTrans = useDebounce(transitionsText, 300);
     const computed = useMemo(() => {
-        return computePetriNet(debouncedText, debouncedTrans, rankdir)
-    }, [debouncedText, debouncedTrans, rankdir]);
+        return computePetriNet(debouncedText, debouncedTrans, rankdir, inputFormat)
+    }, [debouncedText, debouncedTrans, rankdir, inputFormat]);
+
+    const displayText = useMemo(() => {
+        if (!computed.model) return text;
+        switch (viewFormat) {
+            case 'json':
+                return JSON.stringify(computed.model, null, 2);
+            case 'pnml':
+                return toPNML(computed.model);
+            case 'dot':
+                return toDot(computed.model, { rankdir });
+            case 'mermaid':
+                return toMermaid(computed.model, { direction: rankdir });
+            default:
+                return text;
+        }
+    }, [computed.model, viewFormat, rankdir, text]);
 
     useEffect(() => {
         setError(computed.error);
@@ -123,7 +125,7 @@ export default function App() {
 
     const onComputeAlignment = useCallback(() => {
         try {
-            const parsed: PetriNetInput = parsePetriNet(applyImportTransformIfNeeded(text, importExpr));
+            const parsed: PetriNetInput = parsePetriNetByFormat(text, inputFormat);
             // Use raw refs (ids or labels) for alignment matching
             const refs = transitionsText
                 .split(/[\,\n\r\t]+/)
@@ -140,38 +142,22 @@ export default function App() {
             setAlignCost(null);
             setAlignFitness(null);
         }
-    }, [text, transitionsText]);
+    }, [text, transitionsText, inputFormat]);
 
     // --- Editing helpers ---
-    const isPNML = useMemo(() => {
-        const trimmed = text.trim();
-        return trimmed.startsWith('<') || /<\s*pnml[\s>]/i.test(trimmed);
-    }, [text]);
+    const isEditableJSON = viewFormat === 'json' && inputFormat === 'json';
 
     const tryParseModel = useCallback((t: string): PetriNetInput | null => {
         try {
-            return parsePetriNet(applyImportTransformIfNeeded(t, importExpr));
+            return parsePetriNetByFormat(t, inputFormat);
         } catch {
             return null;
         }
-    }, [importExpr]);
+    }, [inputFormat]);
 
     const currentModel = useMemo(() => tryParseModel(text), [text, tryParseModel]);
 
     const stringifyModel = (m: PetriNetInput) => JSON.stringify(m, null, 2);
-
-    const onExportTransformedJSON = useCallback(() => {
-        if (!currentModel) return;
-        try {
-            const transformed = applyExportTransform(currentModel, exportExpr);
-            const json = JSON.stringify(transformed, null, 2);
-            const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            triggerDownload(url, 'petri-net-transformed.json');
-        } catch (e: any) {
-            setError(e?.message ?? String(e));
-        }
-    }, [currentModel, exportExpr]);
 
     const nextPlaceId = (m: PetriNetInput) => {
         const base = 'P';
@@ -245,15 +231,29 @@ export default function App() {
         return () => window.removeEventListener('keydown', onKey);
     }, []);
 
-    const onConvertPNMLToJSON = useCallback(() => {
+    const onConvertInputToJSON = useCallback(() => {
         try {
-            const model = parsePetriNet(text);
+            const model = parsePetriNetByFormat(text, inputFormat);
             setText(stringifyModel(model));
+            setInputFormat('json');
+            setViewFormat('json');
             setError(null);
         } catch (e: any) {
             setError(e?.message ?? String(e));
         }
-    }, [text]);
+    }, [text, inputFormat]);
+
+    const onApplyViewAsInput = useCallback(() => {
+        try {
+            if (!computed.model) return;
+            let nextText = displayText;
+            setText(nextText);
+            setInputFormat(viewFormat);
+            setError(null);
+        } catch (e: any) {
+            setError(e?.message ?? String(e));
+        }
+    }, [computed.model, displayText, viewFormat]);
 
     const submitAddPlace = useCallback(() => {
         if (!currentModel) return;
@@ -374,48 +374,10 @@ export default function App() {
                 <div className="pane left">
                     <div style={styles.toolbarContainer}>
                         <div style={styles.toolbarHeader}>Edit</div>
-                        {/* JSONata transform section */}
-                        <div style={styles.formCard}>
-                            <div style={styles.formRow}>
-                                <div style={{ ...styles.formLabel, flex: '0 0 auto' }}>JSONata</div>
-                                <button
-                                    style={btnStyle}
-                                    onClick={() => setShowJsonataPanel(s => !s)}
-                                    aria-expanded={showJsonataPanel}
-                                >{showJsonataPanel ? 'Hide' : 'Show'}</button>
-                            </div>
-                            {showJsonataPanel && (
-                                <>
-                                    <div style={styles.formRow}>
-                                        <div style={styles.formLabel}>Import JSONata</div>
-                                        <textarea
-                                            value={importExpr}
-                                            onChange={(e) => setImportExpr(e.target.value)}
-                                            placeholder="Expression to convert external JSON → internal PetriNetInput"
-                                            style={{ ...styles.input, height: 60 }}
-                                            spellCheck={false}
-                                        />
-                                    </div>
-                                    <div style={styles.formRow}>
-                                        <div style={styles.formLabel}>Export JSONata</div>
-                                        <textarea
-                                            value={exportExpr}
-                                            onChange={(e) => setExportExpr(e.target.value)}
-                                            placeholder="Expression to convert internal PetriNetInput → external JSON"
-                                            style={{ ...styles.input, height: 60 }}
-                                            spellCheck={false}
-                                        />
-                                    </div>
-                                    <div style={styles.formActions}>
-                                        <button onClick={onExportTransformedJSON} style={btnStyle}>Export Transformed JSON</button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                        {isPNML ? (
+                        {!isEditableJSON ? (
                             <div style={styles.convertHint}>
-                                Editing is available for JSON nets. Convert PNML to JSON?
-                                <button onClick={onConvertPNMLToJSON} style={{ ...btnStyle, marginLeft: 8 }}>Convert</button>
+                                Editing is available for JSON nets. Convert input to JSON?
+                                <button onClick={onConvertInputToJSON} style={{ ...btnStyle, marginLeft: 8 }}>Convert</button>
                             </div>
                         ) : !currentModel ? (
                             <div style={styles.convertHint}>Fix input errors to enable editing.</div>
@@ -569,13 +531,40 @@ export default function App() {
                             </div>
                         )}
                     </div>
-                    <div className="pane-header">Petri net (JSON or PNML)</div>
+                    <div className="pane-header">Petri net (Input/View Formats)</div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 12px' }}>
+                        <label style={styles.directionLabel}>Input:</label>
+                        <select className="select" value={inputFormat} onChange={(e) => setInputFormat(e.target.value as DataFormat)}>
+                            <option value="json">JSON</option>
+                            <option value="pnml">PNML</option>
+                            <option value="dot">DOT</option>
+                            <option value="mermaid">Mermaid</option>
+                        </select>
+                        <label style={{ ...styles.directionLabel, marginLeft: 8 }}>View as:</label>
+                        <select className="select" value={viewFormat} onChange={(e) => setViewFormat(e.target.value as DataFormat)}>
+                            <option value="json">JSON</option>
+                            <option value="pnml">PNML</option>
+                            <option value="dot">DOT</option>
+                            <option value="mermaid">Mermaid</option>
+                        </select>
+                        {viewFormat !== inputFormat && (
+                            <button style={{ ...btnStyle, marginLeft: 8 }} onClick={onApplyViewAsInput}>Make View the Input</button>
+                        )}
+                    </div>
                     <textarea
                         className="editor"
                         data-testid="petri-input"
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         spellCheck={false}
+                    />
+                    <div className="pane-header">View Preview ({viewFormat.toUpperCase()})</div>
+                    <textarea
+                        className="editor"
+                        value={displayText}
+                        readOnly
+                        spellCheck={false}
+                        style={{ ...styles.transitionsTextarea, height: 120 }}
                     />
                     <div className="pane-header">Transitions (IDs or labels, comma/space separated)</div>
                     <textarea
