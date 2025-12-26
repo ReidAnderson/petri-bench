@@ -1,11 +1,11 @@
-import type { PetriNetInput } from './utils/types';
+import type { PetriNet } from './utils/types';
 
-export const samplePetriNet: PetriNetInput = {
+export const samplePetriNet: PetriNet = {
     places: [
         { id: 'P0', label: 'Start', tokens: 1 },
-        { id: 'P1', label: 'Queued' },
-        { id: 'P2', label: 'Processing' },
-        { id: 'P3', label: 'Done' }
+        { id: 'P1', label: 'Queued', tokens: 0 },
+        { id: 'P2', label: 'Processing', tokens: 0 },
+        { id: 'P3', label: 'Done', tokens: 0 }
     ],
     transitions: [
         { id: 'T0', label: 'Enqueue' },

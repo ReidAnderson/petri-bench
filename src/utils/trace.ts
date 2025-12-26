@@ -1,4 +1,4 @@
-import type { PetriNetInput } from './types';
+import type { PetriNet } from './types';
 
 export type ResolveResult = {
     ids: string[];
@@ -11,7 +11,7 @@ export type ResolveResult = {
  * - Exact ID match wins.
  * - Exact label match resolves if unique; ambiguous labels produce a warning and are skipped.
  */
-export function resolveTransitionRefs(model: PetriNetInput, refs: string[]): ResolveResult {
+export function resolveTransitionRefs(model: PetriNet, refs: string[]): ResolveResult {
     const idSet = new Set(model.transitions.map(t => t.id));
     const byLabel = new Map<string, string[]>();
     for (const t of model.transitions) {

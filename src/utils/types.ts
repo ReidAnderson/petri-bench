@@ -1,24 +1,21 @@
 export type Place = {
     id: string;
-    label?: string;
-    tokens?: number;
+    label: string;
+    tokens: number;
 };
 
 export type Transition = {
     id: string;
-    label?: string;
-    modelOnlyCost?: number;
-    logOnlyCost?: number;
+    label: string;
 };
 
 export type Arc = {
     from: string;
     to: string;
     weight?: number;
-    arcType?: 'standard' | 'inhibitor';
 };
 
-export type PetriNetInput = {
+export type PetriNet = {
     places: Place[];
     transitions: Transition[];
     arcs: Arc[];

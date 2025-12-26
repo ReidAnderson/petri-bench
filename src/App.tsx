@@ -10,14 +10,14 @@ import { toDot, type RankDir } from './utils/toDot';
 import { toMermaid } from './utils/toMermaid';
 import { toPNML } from './utils/toPNML';
 import { resolveTransitionRefs } from './utils/trace';
-import type { AlignmentMove, PetriNetInput } from './utils/types';
+import type { AlignmentMove, PetriNet, Place, Transition } from './utils/types';
 import { useDebounce } from './utils/useDebounce';
 
 type DataFormat = 'json' | 'pnml' | 'dot' | 'mermaid';
 
 function computePetriNet(text: string, transitions: string, rankdir: RankDir, inputFormat: DataFormat) {
     try {
-        const parsed: PetriNetInput = parsePetriNetByFormat(text, inputFormat);
+        const parsed: PetriNet = parsePetriNetByFormat(text, inputFormat);
         // parse transitions sequence: accept comma/space/line separated ids or labels
         const refs = transitions
             .split(/[\,\n\r\t]+/)
@@ -128,7 +128,7 @@ export default function App() {
 
     const onComputeAlignment = useCallback(() => {
         try {
-            const parsed: PetriNetInput = parsePetriNetByFormat(text, inputFormat);
+            const parsed: PetriNet = parsePetriNetByFormat(text, inputFormat);
             // Use raw refs (ids or labels) for alignment matching
             const refs = transitionsText
                 .split(/[\,\n\r\t]+/)
@@ -150,7 +150,7 @@ export default function App() {
     // --- Editing helpers ---
     const isEditableJSON = viewFormat === 'json' && inputFormat === 'json';
 
-    const tryParseModel = useCallback((t: string): PetriNetInput | null => {
+    const tryParseModel = useCallback((t: string): PetriNet | null => {
         try {
             return parsePetriNetByFormat(t, inputFormat);
         } catch {
@@ -160,16 +160,16 @@ export default function App() {
 
     const currentModel = useMemo(() => tryParseModel(text), [text, tryParseModel]);
 
-    const stringifyModel = (m: PetriNetInput) => JSON.stringify(m, null, 2);
+    const stringifyModel = (m: PetriNet) => JSON.stringify(m, null, 2);
 
-    const nextPlaceId = (m: PetriNetInput) => {
+    const nextPlaceId = (m: PetriNet) => {
         const base = 'P';
         const used = new Set(m.places.map(p => p.id));
         let n = 0;
         while (used.has(`${base}${n}`)) n++;
         return `${base}${n}`;
     };
-    const nextTransitionId = (m: PetriNetInput) => {
+    const nextTransitionId = (m: PetriNet) => {
         const base = 'T';
         const used = new Set(m.transitions.map(p => p.id));
         let n = 0;
@@ -268,11 +268,10 @@ export default function App() {
             setError(`ID already exists: ${id}`);
             return;
         }
-        const tokens = Math.max(0, Number.isFinite(Number(placeTokens)) ? Number(placeTokens) : 0);
-        const place: any = { id };
-        if (placeLabel.trim()) place.label = placeLabel.trim();
-        if (tokens > 0) place.tokens = tokens;
-        const model: PetriNetInput = {
+        const tokens = Math.max(0, Number.isFinite(Number(placeTokens)) ? Math.trunc(Number(placeTokens)) : 0);
+        const label = placeLabel.trim() || id;
+        const place: Place = { id, label, tokens };
+        const model: PetriNet = {
             places: [...currentModel.places, place],
             transitions: currentModel.transitions.slice(),
             arcs: currentModel.arcs.slice(),
@@ -297,9 +296,9 @@ export default function App() {
             setError(`ID already exists: ${id}`);
             return;
         }
-        const t: any = { id };
-        if (transLabel.trim()) t.label = transLabel.trim();
-        const model: PetriNetInput = {
+        const label = transLabel.trim() || id;
+        const t: Transition = { id, label };
+        const model: PetriNet = {
             places: currentModel.places.slice(),
             transitions: [...currentModel.transitions, t],
             arcs: currentModel.arcs.slice(),
@@ -332,7 +331,7 @@ export default function App() {
         }
         const newArc: any = { from, to };
         if (weightVal > 1) newArc.weight = weightVal;
-        const model: PetriNetInput = {
+        const model: PetriNet = {
             places: currentModel.places.slice(),
             transitions: currentModel.transitions.slice(),
             arcs: [...currentModel.arcs, newArc],
@@ -363,7 +362,7 @@ export default function App() {
             ? currentModel.places.some(p => p.id === targetId)
             : currentModel.transitions.some(t => t.id === targetId);
         if (!hasTarget) { setError(`${kind} not found: ${targetId}`); return; }
-        const nextModel: PetriNetInput = {
+        const nextModel: PetriNet = {
             places: kind === 'place' ? currentModel.places.filter(p => p.id !== targetId) : currentModel.places.slice(),
             transitions: kind === 'transition' ? currentModel.transitions.filter(t => t.id !== targetId) : currentModel.transitions.slice(),
             arcs: currentModel.arcs.filter(a => a.from !== targetId && a.to !== targetId),

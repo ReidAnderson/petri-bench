@@ -1,16 +1,14 @@
-import type { PetriNetInput } from './types';
+import type { Arc, PetriNet, Place, Transition } from './types';
 
 /**
  * Parse a Petri net from either JSON (preferred) or PNML (XML) text.
  * - Auto-detects PNML if text starts with '<' or contains '<pnml'.
  */
-export function parsePetriNet(text: string): PetriNetInput {
+export function parsePetriNet(text: string): PetriNet {
     const trimmed = text.trim();
     // Heuristic: XML / PNML if starts with '<' or includes '<pnml'
     if (trimmed.startsWith('<') || /<\s*pnml[\s>]/i.test(trimmed)) {
-        const model = parsePNML(trimmed);
-        validateModel(model);
-        return model;
+        return parsePNML(trimmed);
     }
 
     // JSON path (backward compatible)
@@ -21,42 +19,27 @@ export function parsePetriNet(text: string): PetriNetInput {
         throw new Error('Input is not valid JSON or PNML.');
     }
     if (typeof obj !== 'object' || obj === null) throw new Error('Root must be an object.');
-    const root = obj as Record<string, unknown>;
-
-    // Basic shape checks
-    asArray(root.places, 'places');
-    asArray(root.transitions, 'transitions');
-    asArray(root.arcs, 'arcs');
-
-    const model: PetriNetInput = obj as PetriNetInput;
-    validateModel(model);
-    return model;
+    return normalizeAndValidate(obj);
 }
 
 /**
  * Parse a Petri net from a specific format.
  * Supported formats: 'json' | 'pnml' | 'dot' | 'mermaid'
  */
-export function parsePetriNetByFormat(text: string, format: 'json' | 'pnml' | 'dot' | 'mermaid'): PetriNetInput {
+export function parsePetriNetByFormat(text: string, format: 'json' | 'pnml' | 'dot' | 'mermaid'): PetriNet {
     const trimmed = text.trim();
     if (!trimmed) throw new Error('Empty input.');
     if (format === 'json') {
         return parsePetriNet(text);
     }
     if (format === 'pnml') {
-        const model = parsePNML(trimmed);
-        validateModel(model);
-        return model;
+        return parsePNML(trimmed);
     }
     if (format === 'dot') {
-        const model = parseDOT(trimmed);
-        validateModel(model);
-        return model;
+        return parseDOT(trimmed);
     }
     if (format === 'mermaid') {
-        const model = parseMermaid(trimmed);
-        validateModel(model);
-        return model;
+        return parseMermaid(trimmed);
     }
     throw new Error(`Unsupported format: ${format}`);
 }
@@ -72,8 +55,44 @@ function asString(value: unknown, name: string): string {
     return value;
 }
 
+function normalizeAndValidate(raw: any): PetriNet {
+    const model = normalizeModel(raw);
+    validateModel(model);
+    return model;
+}
+
+function normalizeModel(raw: any): PetriNet {
+    const places = asArray(raw?.places, 'places').map((p, idx) => normalizePlace(p, idx));
+    const transitions = asArray(raw?.transitions, 'transitions').map((t, idx) => normalizeTransition(t, idx));
+    const arcs = asArray(raw?.arcs, 'arcs').map((a, idx) => normalizeArc(a, idx));
+    return { places, transitions, arcs };
+}
+
+function normalizePlace(value: any, idx: number): Place {
+    if (typeof value !== 'object' || value === null) throw new Error(`places[${idx}] must be an object.`);
+    const id = asString((value as any).id, `places[${idx}].id`);
+    const label = pickLabel((value as any).label, id);
+    const tokens = toNonNegativeInt((value as any).tokens, 0);
+    return { id, label, tokens };
+}
+
+function normalizeTransition(value: any, idx: number): Transition {
+    if (typeof value !== 'object' || value === null) throw new Error(`transitions[${idx}] must be an object.`);
+    const id = asString((value as any).id, `transitions[${idx}].id`);
+    const label = pickLabel((value as any).label, id);
+    return { id, label };
+}
+
+function normalizeArc(value: any, idx: number): Arc {
+    if (typeof value !== 'object' || value === null) throw new Error(`arcs[${idx}] must be an object.`);
+    const from = asString((value as any).from, `arcs[${idx}].from`);
+    const to = asString((value as any).to, `arcs[${idx}].to`);
+    const weight = toPositiveInt((value as any).weight, 1);
+    return weight > 1 ? { from, to, weight } : { from, to };
+}
+
 // --- Shared validation ---
-function validateModel(model: PetriNetInput) {
+function validateModel(model: PetriNet) {
     const placeIds = new Set<string>();
     const transitionIds = new Set<string>();
 
@@ -96,7 +115,7 @@ function validateModel(model: PetriNetInput) {
 }
 
 // --- PNML parsing ---
-function parsePNML(xmlText: string): PetriNetInput {
+function parsePNML(xmlText: string): PetriNet {
     // Use DOMParser in browser; if unavailable, throw an explicit error
     const DOMP: any = (globalThis as any).DOMParser ? (globalThis as any).DOMParser : null;
     if (!DOMP) {
@@ -155,7 +174,7 @@ function parsePNML(xmlText: string): PetriNetInput {
         arcs.push(a);
     }
 
-    return { places, transitions, arcs };
+    return normalizeAndValidate({ places, transitions, arcs });
 }
 
 // --- PNML helpers ---
@@ -190,7 +209,7 @@ function toIntSafe(s?: string): number | undefined {
 }
 
 // --- DOT parsing (basic heuristic) ---
-function parseDOT(dotText: string): PetriNetInput {
+function parseDOT(dotText: string): PetriNet {
     // Remove comments and compress whitespace
     const src = dotText
         .replace(/\/\/.*$/gm, '')
@@ -273,7 +292,7 @@ function parseDOT(dotText: string): PetriNetInput {
         }
     }
 
-    return { places, transitions, arcs };
+    return normalizeAndValidate({ places, transitions, arcs });
 }
 
 function extractTokens(label?: string): number | undefined {
@@ -288,7 +307,7 @@ function extractTokens(label?: string): number | undefined {
 }
 
 // --- Mermaid parsing (flowchart) ---
-function parseMermaid(mmText: string): PetriNetInput {
+function parseMermaid(mmText: string): PetriNet {
     const lines = mmText
         .replace(/%%.*$/gm, '')
         .split(/\r?\n/)
@@ -376,7 +395,7 @@ function parseMermaid(mmText: string): PetriNetInput {
         }
     }
 
-    return { places, transitions, arcs };
+    return normalizeAndValidate({ places, transitions, arcs });
 }
 
 function cleanLabel(label?: string): string | undefined {
@@ -385,4 +404,33 @@ function cleanLabel(label?: string): string | undefined {
     // Strip matching quotes
     s = s.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
     return s;
+}
+
+function pickLabel(value: unknown, fallback: string): string {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length) return trimmed;
+    }
+    return fallback;
+}
+
+function toNonNegativeInt(value: unknown, fallback: number): number {
+    const parsed = toInteger(value);
+    if (parsed == null) return fallback;
+    return Math.max(0, parsed);
+}
+
+function toPositiveInt(value: unknown, fallback: number): number {
+    const parsed = toInteger(value);
+    if (parsed == null) return fallback;
+    return Math.max(1, parsed);
+}
+
+function toInteger(value: unknown): number | null {
+    if (typeof value === 'number' && isFinite(value)) return Math.trunc(value);
+    if (typeof value === 'string' && value.trim().length) {
+        const n = Number(value);
+        if (Number.isFinite(n)) return Math.trunc(n);
+    }
+    return null;
 }

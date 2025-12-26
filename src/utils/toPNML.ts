@@ -1,9 +1,9 @@
-import type { PetriNetInput } from './types';
+import type { PetriNet } from './types';
 
 /**
- * Convert a PetriNetInput model to minimal PNML string.
+ * Convert a PetriNet model to minimal PNML string.
  */
-export function toPNML(model: PetriNetInput): string {
+export function toPNML(model: PetriNet): string {
     const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const lines: string[] = [];
     lines.push('<?xml version="1.0" encoding="UTF-8"?>');

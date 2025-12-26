@@ -1,5 +1,5 @@
 import { PriorityQueue } from './priorityQueue';
-import type { AlignmentMove, AlignmentState, Arc, Marking, PetriNetInput } from './types';
+import type { AlignmentMove, AlignmentState, Arc, Marking, PetriNet } from './types';
 
 type InArc = { place: string; weight: number };
 type OutArc = { place: string; weight: number };
@@ -20,7 +20,7 @@ type Node = AlignmentState & {
  * Matching of a trace event to a transition happens when the event equals the transition id or its label.
  * Goal condition: end of trace reached (traceIndex === trace.length). Final marking is not enforced.
  */
-export function findOptimalAlignment(trace: string[], model: PetriNetInput): { alignment: AlignmentMove[], cost: number } {
+export function findOptimalAlignment(trace: string[], model: PetriNet): { alignment: AlignmentMove[], cost: number } {
     // Build arc index structures and initial marking
     const placeSet = new Set(model.places.map(p => p.id));
     const transitionSet = new Set(model.transitions.map(t => t.id));

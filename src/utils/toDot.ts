@@ -1,9 +1,9 @@
-import type { PetriNetInput } from './types';
+import type { PetriNet } from './types';
 
 export type RankDir = 'LR' | 'TB' | 'RL' | 'BT';
 export type ToDotOptions = { rankdir?: RankDir; label?: string };
 
-export function toDot(model: PetriNetInput, options?: ToDotOptions): string {
+export function toDot(model: PetriNet, options?: ToDotOptions): string {
     const lines: string[] = [];
     lines.push('digraph PetriNet {');
     const rankdir = options?.rankdir ?? 'LR';
