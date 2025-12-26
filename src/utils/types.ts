@@ -7,12 +7,15 @@ export type Place = {
 export type Transition = {
     id: string;
     label?: string;
+    modelOnlyCost?: number;
+    logOnlyCost?: number;
 };
 
 export type Arc = {
     from: string;
     to: string;
     weight?: number;
+    arcType?: 'standard' | 'inhibitor';
 };
 
 export type PetriNetInput = {

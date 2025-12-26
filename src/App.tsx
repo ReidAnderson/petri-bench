@@ -49,6 +49,9 @@ export default function App() {
     const [alignMoves, setAlignMoves] = useState<AlignmentMove[] | null>(null);
     const [alignCost, setAlignCost] = useState<number | null>(null);
     const [alignFitness, setAlignFitness] = useState<number | null>(null);
+    const [isPreviewCollapsed, setIsPreviewCollapsed] = useState(false);
+    const [isTransitionsCollapsed, setIsTransitionsCollapsed] = useState(false);
+    const [isAlignmentCollapsed, setIsAlignmentCollapsed] = useState(false);
 
     // Formatting panel state (input/view)
 
@@ -189,8 +192,10 @@ export default function App() {
         } else if (openPanel === 'connect') {
             setConnDir('PT');
             setConnWeight('1');
-            setConnPlaceId(currentModel.places[0]?.id ?? '');
-            setConnTransId(currentModel.transitions[0]?.id ?? '');
+            const lastPlaceId = currentModel.places[currentModel.places.length - 1]?.id ?? '';
+            const lastTransId = currentModel.transitions[currentModel.transitions.length - 1]?.id ?? '';
+            setConnPlaceId(lastPlaceId);
+            setConnTransId(lastTransId);
             setTimeout(() => connPlaceRef.current?.focus(), 0);
         } else if (openPanel === 'removePlace') {
             setConnPlaceId(currentModel.places[0]?.id ?? '');
@@ -279,7 +284,8 @@ export default function App() {
         setOpenPanel('connect');
         setConnDir('PT');
         setConnPlaceId(id);
-        setConnTransId(currentModel.transitions[0]?.id ?? '');
+        const lastTransId = currentModel.transitions[currentModel.transitions.length - 1]?.id ?? '';
+        setConnTransId(lastTransId);
         setError(null);
     }, [currentModel, placeId, placeLabel, placeTokens]);
 
@@ -305,7 +311,8 @@ export default function App() {
         setOpenPanel('connect');
         setConnDir('TP');
         setConnTransId(id);
-        setConnPlaceId(currentModel.places[0]?.id ?? '');
+        const lastPlaceId = currentModel.places[currentModel.places.length - 1]?.id ?? '';
+        setConnPlaceId(lastPlaceId);
         setError(null);
     }, [currentModel, transId, transLabel]);
 
@@ -558,24 +565,46 @@ export default function App() {
                         onChange={(e) => setText(e.target.value)}
                         spellCheck={false}
                     />
-                    <div className="pane-header">View Preview ({viewFormat.toUpperCase()})</div>
-                    <textarea
-                        className="editor"
-                        value={displayText}
-                        readOnly
-                        spellCheck={false}
-                        style={{ ...styles.transitionsTextarea, height: 120 }}
-                    />
-                    <div className="pane-header">Transitions (IDs or labels, comma/space separated)</div>
-                    <textarea
-                        className="editor"
-                        data-testid="transitions-input"
-                        value={transitionsText}
-                        onChange={(e) => setTransitionsText(e.target.value)}
-                        placeholder="Example: T0, T1, T2"
-                        spellCheck={false}
-                        style={styles.transitionsTextarea}
-                    />
+                    <div className="pane-header" style={styles.collapsibleHeader}>
+                        <span>View Preview ({viewFormat.toUpperCase()})</span>
+                        <button
+                            style={btnStyle}
+                            onClick={() => setIsPreviewCollapsed((prev) => !prev)}
+                            aria-expanded={!isPreviewCollapsed}
+                        >
+                            {isPreviewCollapsed ? 'Expand' : 'Collapse'}
+                        </button>
+                    </div>
+                    {!isPreviewCollapsed && (
+                        <textarea
+                            className="editor"
+                            value={displayText}
+                            readOnly
+                            spellCheck={false}
+                            style={{ ...styles.transitionsTextarea, height: 120 }}
+                        />
+                    )}
+                    <div className="pane-header" style={styles.collapsibleHeader}>
+                        <span>Transitions (IDs or labels, comma/space separated)</span>
+                        <button
+                            style={btnStyle}
+                            onClick={() => setIsTransitionsCollapsed((prev) => !prev)}
+                            aria-expanded={!isTransitionsCollapsed}
+                        >
+                            {isTransitionsCollapsed ? 'Expand' : 'Collapse'}
+                        </button>
+                    </div>
+                    {!isTransitionsCollapsed && (
+                        <textarea
+                            className="editor"
+                            data-testid="transitions-input"
+                            value={transitionsText}
+                            onChange={(e) => setTransitionsText(e.target.value)}
+                            placeholder="Example: T0, T1, T2"
+                            spellCheck={false}
+                            style={styles.transitionsTextarea}
+                        />
+                    )}
                     <div style={styles.alignmentControls}>
                         <button onClick={onComputeAlignment} style={btnStyle}>Calculate Alignment</button>
                         {alignFitness != null && (
@@ -609,12 +638,23 @@ export default function App() {
                     )}
                     {alignMoves && alignMoves.length > 0 && (
                         <div style={styles.alignmentContainer}>
-                            <div style={styles.alignmentHeader}>Alignment</div>
-                            <ol style={styles.alignmentList}>
-                                {alignMoves.map((m, i) => (
-                                    <li key={i}><code>{m.moveType}</code>: {m.activity}</li>
-                                ))}
-                            </ol>
+                            <div style={styles.collapsibleHeader}>
+                                <span style={styles.alignmentHeader}>Alignment</span>
+                                <button
+                                    style={btnStyle}
+                                    onClick={() => setIsAlignmentCollapsed((prev) => !prev)}
+                                    aria-expanded={!isAlignmentCollapsed}
+                                >
+                                    {isAlignmentCollapsed ? 'Expand' : 'Collapse'}
+                                </button>
+                            </div>
+                            {!isAlignmentCollapsed && (
+                                <ol style={styles.alignmentList}>
+                                    {alignMoves.map((m, i) => (
+                                        <li key={i}><code>{m.moveType}</code>: {m.activity}</li>
+                                    ))}
+                                </ol>
+                            )}
                         </div>
                     )}
                     {error && <div className="error">{error}</div>}
@@ -734,6 +774,12 @@ const styles: Record<string, React.CSSProperties> = {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
+    },
+    collapsibleHeader: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
     },
     paneHeaderControls: {
         marginLeft: 'auto',
