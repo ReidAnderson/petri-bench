@@ -165,11 +165,11 @@ function activityFor(t: { id: string; label?: string }): string {
 function groupInputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<string>): Map<string, InArc[]> {
     const m = new Map<string, InArc[]>();
     for (const a of arcs) {
-        if (placeSet.has(a.from) && transitionSet.has(a.to)) {
+        if (placeSet.has(a.sourceId) && transitionSet.has(a.targetId)) {
             const w = a.weight && a.weight !== 0 ? Math.trunc(a.weight) : 1;
-            const arr = m.get(a.to) ?? [];
-            arr.push({ place: a.from, weight: w });
-            m.set(a.to, arr);
+            const arr = m.get(a.targetId) ?? [];
+            arr.push({ place: a.sourceId, weight: w });
+            m.set(a.targetId, arr);
         }
     }
     return m;
@@ -178,11 +178,11 @@ function groupInputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<s
 function groupOutputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<string>): Map<string, OutArc[]> {
     const m = new Map<string, OutArc[]>();
     for (const a of arcs) {
-        if (transitionSet.has(a.from) && placeSet.has(a.to)) {
+        if (transitionSet.has(a.sourceId) && placeSet.has(a.targetId)) {
             const w = a.weight && a.weight !== 0 ? Math.trunc(a.weight) : 1;
-            const arr = m.get(a.from) ?? [];
-            arr.push({ place: a.to, weight: w });
-            m.set(a.from, arr);
+            const arr = m.get(a.sourceId) ?? [];
+            arr.push({ place: a.targetId, weight: w });
+            m.set(a.sourceId, arr);
         }
     }
     return m;
@@ -191,8 +191,8 @@ function groupOutputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<
 function computeSinkPlaces(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<string>): Set<string> {
     const hasOut = new Set<string>();
     for (const a of arcs) {
-        if (placeSet.has(a.from) && transitionSet.has(a.to)) {
-            hasOut.add(a.from);
+        if (placeSet.has(a.sourceId) && transitionSet.has(a.targetId)) {
+            hasOut.add(a.sourceId);
         }
     }
     const sinks = new Set<string>();

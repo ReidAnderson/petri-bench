@@ -7,7 +7,7 @@ describe('Petri net parsing and DOT generation', () => {
         const json = JSON.stringify({
             places: [{ id: 'P1', tokens: 1 }],
             transitions: [{ id: 'T1' }],
-            arcs: [{ from: 'P1', to: 'T1' }]
+            arcs: [{ sourceId: 'P1', targetId: 'T1' }]
         });
         const model = parsePetriNet(json);
         const dot = toDot(model, { rankdir: 'TB' });

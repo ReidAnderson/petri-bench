@@ -14,8 +14,8 @@ describe('applyTransitions', () => {
                 { id: 'T0', label: 'T0' },
             ],
             arcs: [
-                { from: 'P0', to: 'T0' },
-                { from: 'T0', to: 'P1' },
+                { sourceId: 'P0', targetId: 'T0' },
+                { sourceId: 'T0', targetId: 'P1' },
             ],
         };
 
@@ -30,7 +30,7 @@ describe('applyTransitions', () => {
         const model: PetriNet = {
             places: [{ id: 'P0', label: 'P0', tokens: 0 }],
             transitions: [{ id: 'T0', label: 'T0' }],
-            arcs: [{ from: 'P0', to: 'T0' }],
+            arcs: [{ sourceId: 'P0', targetId: 'T0' }],
         };
         expect(() => applyTransitions(model, ['T0'], { strict: true })).toThrow();
     });
@@ -45,7 +45,7 @@ describe('applyTransitions', () => {
                 { id: 'T0', label: 'T0' },
                 { id: 'T1', label: 'T1' }
             ],
-            arcs: [{ from: 'P0', to: 'T0' }, { from: 'T0', to: 'P1' }],
+            arcs: [{ sourceId: 'P0', targetId: 'T0' }, { sourceId: 'T0', targetId: 'P1' }],
         };
         const seq = ['BAD', 'T0', 'T1'];
         const res = replayTransitionsDetailed(model, seq, { strict: false });

@@ -85,10 +85,10 @@ function normalizeTransition(value: any, idx: number): Transition {
 
 function normalizeArc(value: any, idx: number): Arc {
     if (typeof value !== 'object' || value === null) throw new Error(`arcs[${idx}] must be an object.`);
-    const from = asString((value as any).from, `arcs[${idx}].from`);
-    const to = asString((value as any).to, `arcs[${idx}].to`);
+    const sourceId = asString((value as any).sourceId, `arcs[${idx}].sourceId`);
+    const targetId = asString((value as any).targetId, `arcs[${idx}].targetId`);
     const weight = toPositiveInt((value as any).weight, 1);
-    return weight > 1 ? { from, to, weight } : { from, to };
+    return weight > 1 ? { sourceId, targetId, weight } : { sourceId, targetId };
 }
 
 // --- Shared validation ---
@@ -107,10 +107,10 @@ function validateModel(model: PetriNet) {
         transitionIds.add(id);
     }
     for (const a of model.arcs) {
-        const from = asString((a as any).from, 'arc.from');
-        const to = asString((a as any).to, 'arc.to');
-        if (!(placeIds.has(from) || transitionIds.has(from))) throw new Error(`Arc.from not found: ${from}`);
-        if (!(placeIds.has(to) || transitionIds.has(to))) throw new Error(`Arc.to not found: ${to}`);
+        const sourceId = asString((a as any).sourceId, 'arc.sourceId');
+        const targetId = asString((a as any).targetId, 'arc.targetId');
+        if (!(placeIds.has(sourceId) || transitionIds.has(sourceId))) throw new Error(`Arc.sourceId not found: ${sourceId}`);
+        if (!(placeIds.has(targetId) || transitionIds.has(targetId))) throw new Error(`Arc.targetId not found: ${targetId}`);
     }
 }
 
@@ -161,15 +161,15 @@ function parsePNML(xmlText: string): PetriNet {
     }
 
     // Collect arcs
-    const arcs: Array<{ from: string; to: string; weight?: number }> = [];
+    const arcs: Array<{ sourceId: string; targetId: string; weight?: number }> = [];
     const arcEls: any[] = Array.from(net.getElementsByTagName('arc') ?? []);
     for (const el of arcEls) {
-        const from = attr(el, 'source');
-        const to = attr(el, 'target');
-        if (!from || !to) throw new Error('PNML arc missing source/target');
+        const sourceId = attr(el, 'source');
+        const targetId = attr(el, 'target');
+        if (!sourceId || !targetId) throw new Error('PNML arc missing source/target');
         const wText = nestedText(el, ['inscription', 'text']);
         const w = toIntSafe(wText) ?? 1;
-        const a: any = { from, to };
+        const a: any = { sourceId, targetId };
         if (w > 1) a.weight = w;
         arcs.push(a);
     }
@@ -219,7 +219,7 @@ function parseDOT(dotText: string): PetriNet {
 
     const places: Array<{ id: string; label?: string; tokens?: number }> = [];
     const transitions: Array<{ id: string; label?: string }> = [];
-    const arcs: Array<{ from: string; to: string; weight?: number }> = [];
+    const arcs: Array<{ sourceId: string; targetId: string; weight?: number }> = [];
     const nodeTypes = new Map<string, 'place' | 'transition'>();
     const nodeLabels = new Map<string, string | undefined>();
     const nodeTokens = new Map<string, number | undefined>();
@@ -253,8 +253,8 @@ function parseDOT(dotText: string): PetriNet {
     const edgeRegex = /(?:"([^"]+)"|([A-Za-z0-9_]+))\s*->\s*(?:"([^"]+)"|([A-Za-z0-9_]+))(\s*\[(.*?)\])?\s*;/g;
     let em: RegExpExecArray | null;
     while ((em = edgeRegex.exec(src))) {
-        const from = em[1] ?? em[2];
-        const to = em[3] ?? em[4];
+        const sourceId = em[1] ?? em[2];
+        const targetId = em[3] ?? em[4];
         const attrsRaw = em[6] ?? '';
         let weight: number | undefined;
         if (attrsRaw) {
@@ -269,7 +269,7 @@ function parseDOT(dotText: string): PetriNet {
             const w = toIntSafe(lw ?? undefined);
             if (typeof w === 'number' && w > 1) weight = w;
         }
-        arcs.push(weight ? { from, to, weight } : { from, to });
+        arcs.push(weight ? { sourceId, targetId, weight } : { sourceId, targetId });
         // If types are unknown, infer from existing node declarations later
     }
 
@@ -316,7 +316,7 @@ function parseMermaid(mmText: string): PetriNet {
 
     const places: Array<{ id: string; label?: string; tokens?: number }> = [];
     const transitions: Array<{ id: string; label?: string }> = [];
-    const arcs: Array<{ from: string; to: string; weight?: number }> = [];
+    const arcs: Array<{ sourceId: string; targetId: string; weight?: number }> = [];
     const nodeTypes = new Map<string, 'place' | 'transition'>();
     const nodeLabels = new Map<string, string | undefined>();
     const nodeTokens = new Map<string, number | undefined>();
@@ -358,12 +358,12 @@ function parseMermaid(mmText: string): PetriNet {
             const right = edge[3];
             addNodeFromToken(left);
             addNodeFromToken(right);
-            const fromId = (left.match(/^([A-Za-z0-9_]+)/) || [])[1];
-            const toId = (right.match(/^([A-Za-z0-9_]+)/) || [])[1];
+            const sourceId = (left.match(/^([A-Za-z0-9_]+)/) || [])[1];
+            const targetId = (right.match(/^([A-Za-z0-9_]+)/) || [])[1];
             let weight: number | undefined;
             const w = toIntSafe(label ?? undefined);
             if (typeof w === 'number' && w > 1) weight = w;
-            arcs.push(weight ? { from: fromId, to: toId, weight } : { from: fromId, to: toId });
+            arcs.push(weight ? { sourceId, targetId, weight } : { sourceId, targetId });
             continue;
         }
         // Standalone node declaration

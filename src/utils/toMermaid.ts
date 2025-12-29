@@ -23,7 +23,7 @@ export function toMermaid(model: PetriNet, opts?: ToMermaidOptions): string {
     // Arcs
     for (const a of model.arcs) {
         const w = a.weight && a.weight !== 1 ? `|${a.weight}|` : '';
-        lines.push(`${a.from} --${w}--> ${a.to}`);
+        lines.push(`${a.sourceId} --${w}--> ${a.targetId}`);
     }
     return lines.join('\n');
 }

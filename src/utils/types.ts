@@ -10,8 +10,8 @@ export type Transition = {
 };
 
 export type Arc = {
-    from: string;
-    to: string;
+    sourceId: string;
+    targetId: string;
     weight?: number;
 };
 

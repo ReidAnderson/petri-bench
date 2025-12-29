@@ -10,7 +10,7 @@ import { toDot, type RankDir } from './utils/toDot';
 import { toMermaid } from './utils/toMermaid';
 import { toPNML } from './utils/toPNML';
 import { resolveTransitionRefs } from './utils/trace';
-import type { AlignmentMove, PetriNet, Place, Transition } from './utils/types';
+import type { AlignmentMove, Arc, PetriNet, Place, Transition } from './utils/types';
 import { useDebounce } from './utils/useDebounce';
 
 type DataFormat = 'json' | 'pnml' | 'dot' | 'mermaid';
@@ -321,15 +321,15 @@ export default function App() {
         const tId = connTransId.trim();
         if (!pId || !tId) { setError('Select a place and a transition.'); return; }
         const weightVal = Math.max(1, Number.isFinite(Number(connWeight)) ? Number(connWeight) : 1);
-        const from = connDir === 'PT' ? pId : tId;
-        const to = connDir === 'PT' ? tId : pId;
+        const sourceId = connDir === 'PT' ? pId : tId;
+        const targetId = connDir === 'PT' ? tId : pId;
         // Prevent duplicate exact same arc (same from,to)
-        const exists = currentModel.arcs.some(a => a.from === from && a.to === to);
+        const exists = currentModel.arcs.some(a => a.sourceId === sourceId && a.targetId === targetId);
         if (exists) {
             setError('Arc already exists.');
             return;
         }
-        const newArc: any = { from, to };
+        const newArc: Arc = { sourceId, targetId };
         if (weightVal > 1) newArc.weight = weightVal;
         const model: PetriNet = {
             places: currentModel.places.slice(),
@@ -365,7 +365,7 @@ export default function App() {
         const nextModel: PetriNet = {
             places: kind === 'place' ? currentModel.places.filter(p => p.id !== targetId) : currentModel.places.slice(),
             transitions: kind === 'transition' ? currentModel.transitions.filter(t => t.id !== targetId) : currentModel.transitions.slice(),
-            arcs: currentModel.arcs.filter(a => a.from !== targetId && a.to !== targetId),
+            arcs: currentModel.arcs.filter(a => a.sourceId !== targetId && a.targetId !== targetId),
         };
         // push current text to history before mutating
         setHistory(h => (h.length >= maxHistory ? [...h.slice(1), text] : [...h, text]));

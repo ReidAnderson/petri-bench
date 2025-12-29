@@ -86,9 +86,9 @@ function groupInputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<s
     const m = new Map<string, Array<{ place: string; weight: number }>>();
     for (const a of arcs) {
         // Input arcs are those from place -> transition
-        if (placeSet.has(a.from) && transitionSet.has(a.to)) {
+        if (placeSet.has(a.sourceId) && transitionSet.has(a.targetId)) {
             const w = weightOf(a);
-            add(m, a.to, { place: a.from, weight: w });
+            add(m, a.targetId, { place: a.sourceId, weight: w });
         }
     }
     return m;
@@ -98,9 +98,9 @@ function groupOutputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<
     const m = new Map<string, Array<{ place: string; weight: number }>>();
     for (const a of arcs) {
         // Output arcs are those from transition -> place
-        if (transitionSet.has(a.from) && placeSet.has(a.to)) {
+        if (transitionSet.has(a.sourceId) && placeSet.has(a.targetId)) {
             const w = weightOf(a);
-            add(m, a.from, { place: a.to, weight: w });
+            add(m, a.sourceId, { place: a.targetId, weight: w });
         }
     }
     return m;

@@ -13,11 +13,11 @@ export const samplePetriNet: PetriNet = {
         { id: 'T2', label: 'Finish' }
     ],
     arcs: [
-        { from: 'P0', to: 'T0' },
-        { from: 'T0', to: 'P1' },
-        { from: 'P1', to: 'T1' },
-        { from: 'T1', to: 'P2' },
-        { from: 'P2', to: 'T2' },
-        { from: 'T2', to: 'P3' }
+        { sourceId: 'P0', targetId: 'T0' },
+        { sourceId: 'T0', targetId: 'P1' },
+        { sourceId: 'P1', targetId: 'T1' },
+        { sourceId: 'T1', targetId: 'P2' },
+        { sourceId: 'P2', targetId: 'T2' },
+        { sourceId: 'T2', targetId: 'P3' }
     ]
 };
