@@ -51,7 +51,7 @@ function asArray(value: unknown, name: string): unknown[] {
 }
 
 function asString(value: unknown, name: string): string {
-    if (typeof value !== 'string') throw new Error(`${name} must be a string.`);
+    if (typeof value !== 'string') throw new Error(`${name} must be a string. Value: ${String(value)}`);
     return value;
 }
 
@@ -376,7 +376,7 @@ function parseMermaid(mmText: string): PetriNet {
 
     // Finalize nodes inferred from arcs
     const ids = new Set<string>();
-    for (const a of arcs) { ids.add(a.from); ids.add(a.to); }
+    for (const a of arcs) { ids.add(a.sourceId); ids.add(a.targetId); }
     for (const k of nodeTypes.keys()) ids.add(k);
     for (const k of nodeLabels.keys()) ids.add(k);
     for (const id of ids) {
