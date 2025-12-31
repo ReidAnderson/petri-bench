@@ -20,7 +20,7 @@ describe('Mermaid parsing', () => {
         expect(t0.label).toBe('Enqueue');
 
         // check an arc
-        const a = model.arcs.find(a => a.from === 'P0' && a.to === 'T0');
+        const a = model.arcs.find(a => a.sourceId === 'P0' && a.targetId === 'T0');
         expect(a).toBeTruthy();
     });
 });

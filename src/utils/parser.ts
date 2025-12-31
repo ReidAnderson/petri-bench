@@ -1,16 +1,14 @@
-import type { PetriNetInput } from './types';
+import type { Arc, PetriNet, Place, Transition } from './types';
 
 /**
  * Parse a Petri net from either JSON (preferred) or PNML (XML) text.
  * - Auto-detects PNML if text starts with '<' or contains '<pnml'.
  */
-export function parsePetriNet(text: string): PetriNetInput {
+export function parsePetriNet(text: string): PetriNet {
     const trimmed = text.trim();
     // Heuristic: XML / PNML if starts with '<' or includes '<pnml'
     if (trimmed.startsWith('<') || /<\s*pnml[\s>]/i.test(trimmed)) {
-        const model = parsePNML(trimmed);
-        validateModel(model);
-        return model;
+        return parsePNML(trimmed);
     }
 
     // JSON path (backward compatible)
@@ -21,42 +19,27 @@ export function parsePetriNet(text: string): PetriNetInput {
         throw new Error('Input is not valid JSON or PNML.');
     }
     if (typeof obj !== 'object' || obj === null) throw new Error('Root must be an object.');
-    const root = obj as Record<string, unknown>;
-
-    // Basic shape checks
-    asArray(root.places, 'places');
-    asArray(root.transitions, 'transitions');
-    asArray(root.arcs, 'arcs');
-
-    const model: PetriNetInput = obj as PetriNetInput;
-    validateModel(model);
-    return model;
+    return normalizeAndValidate(obj);
 }
 
 /**
  * Parse a Petri net from a specific format.
  * Supported formats: 'json' | 'pnml' | 'dot' | 'mermaid'
  */
-export function parsePetriNetByFormat(text: string, format: 'json' | 'pnml' | 'dot' | 'mermaid'): PetriNetInput {
+export function parsePetriNetByFormat(text: string, format: 'json' | 'pnml' | 'dot' | 'mermaid'): PetriNet {
     const trimmed = text.trim();
     if (!trimmed) throw new Error('Empty input.');
     if (format === 'json') {
         return parsePetriNet(text);
     }
     if (format === 'pnml') {
-        const model = parsePNML(trimmed);
-        validateModel(model);
-        return model;
+        return parsePNML(trimmed);
     }
     if (format === 'dot') {
-        const model = parseDOT(trimmed);
-        validateModel(model);
-        return model;
+        return parseDOT(trimmed);
     }
     if (format === 'mermaid') {
-        const model = parseMermaid(trimmed);
-        validateModel(model);
-        return model;
+        return parseMermaid(trimmed);
     }
     throw new Error(`Unsupported format: ${format}`);
 }
@@ -68,12 +51,48 @@ function asArray(value: unknown, name: string): unknown[] {
 }
 
 function asString(value: unknown, name: string): string {
-    if (typeof value !== 'string') throw new Error(`${name} must be a string.`);
+    if (typeof value !== 'string') throw new Error(`${name} must be a string. Value: ${String(value)}`);
     return value;
 }
 
+function normalizeAndValidate(raw: any): PetriNet {
+    const model = normalizeModel(raw);
+    validateModel(model);
+    return model;
+}
+
+function normalizeModel(raw: any): PetriNet {
+    const places = asArray(raw?.places, 'places').map((p, idx) => normalizePlace(p, idx));
+    const transitions = asArray(raw?.transitions, 'transitions').map((t, idx) => normalizeTransition(t, idx));
+    const arcs = asArray(raw?.arcs, 'arcs').map((a, idx) => normalizeArc(a, idx));
+    return { places, transitions, arcs };
+}
+
+function normalizePlace(value: any, idx: number): Place {
+    if (typeof value !== 'object' || value === null) throw new Error(`places[${idx}] must be an object.`);
+    const id = asString((value as any).id, `places[${idx}].id`);
+    const label = pickLabel((value as any).label, id);
+    const tokens = toNonNegativeInt((value as any).tokens, 0);
+    return { id, label, tokens };
+}
+
+function normalizeTransition(value: any, idx: number): Transition {
+    if (typeof value !== 'object' || value === null) throw new Error(`transitions[${idx}] must be an object.`);
+    const id = asString((value as any).id, `transitions[${idx}].id`);
+    const label = pickLabel((value as any).label, id);
+    return { id, label };
+}
+
+function normalizeArc(value: any, idx: number): Arc {
+    if (typeof value !== 'object' || value === null) throw new Error(`arcs[${idx}] must be an object.`);
+    const sourceId = asString((value as any).sourceId, `arcs[${idx}].sourceId`);
+    const targetId = asString((value as any).targetId, `arcs[${idx}].targetId`);
+    const weight = toPositiveInt((value as any).weight, 1);
+    return weight > 1 ? { sourceId, targetId, weight } : { sourceId, targetId };
+}
+
 // --- Shared validation ---
-function validateModel(model: PetriNetInput) {
+function validateModel(model: PetriNet) {
     const placeIds = new Set<string>();
     const transitionIds = new Set<string>();
 
@@ -88,15 +107,15 @@ function validateModel(model: PetriNetInput) {
         transitionIds.add(id);
     }
     for (const a of model.arcs) {
-        const from = asString((a as any).from, 'arc.from');
-        const to = asString((a as any).to, 'arc.to');
-        if (!(placeIds.has(from) || transitionIds.has(from))) throw new Error(`Arc.from not found: ${from}`);
-        if (!(placeIds.has(to) || transitionIds.has(to))) throw new Error(`Arc.to not found: ${to}`);
+        const sourceId = asString((a as any).sourceId, 'arc.sourceId');
+        const targetId = asString((a as any).targetId, 'arc.targetId');
+        if (!(placeIds.has(sourceId) || transitionIds.has(sourceId))) throw new Error(`Arc.sourceId not found: ${sourceId}`);
+        if (!(placeIds.has(targetId) || transitionIds.has(targetId))) throw new Error(`Arc.targetId not found: ${targetId}`);
     }
 }
 
 // --- PNML parsing ---
-function parsePNML(xmlText: string): PetriNetInput {
+function parsePNML(xmlText: string): PetriNet {
     // Use DOMParser in browser; if unavailable, throw an explicit error
     const DOMP: any = (globalThis as any).DOMParser ? (globalThis as any).DOMParser : null;
     if (!DOMP) {
@@ -142,20 +161,20 @@ function parsePNML(xmlText: string): PetriNetInput {
     }
 
     // Collect arcs
-    const arcs: Array<{ from: string; to: string; weight?: number }> = [];
+    const arcs: Array<{ sourceId: string; targetId: string; weight?: number }> = [];
     const arcEls: any[] = Array.from(net.getElementsByTagName('arc') ?? []);
     for (const el of arcEls) {
-        const from = attr(el, 'source');
-        const to = attr(el, 'target');
-        if (!from || !to) throw new Error('PNML arc missing source/target');
+        const sourceId = attr(el, 'source');
+        const targetId = attr(el, 'target');
+        if (!sourceId || !targetId) throw new Error('PNML arc missing source/target');
         const wText = nestedText(el, ['inscription', 'text']);
         const w = toIntSafe(wText) ?? 1;
-        const a: any = { from, to };
+        const a: any = { sourceId, targetId };
         if (w > 1) a.weight = w;
         arcs.push(a);
     }
 
-    return { places, transitions, arcs };
+    return normalizeAndValidate({ places, transitions, arcs });
 }
 
 // --- PNML helpers ---
@@ -190,7 +209,7 @@ function toIntSafe(s?: string): number | undefined {
 }
 
 // --- DOT parsing (basic heuristic) ---
-function parseDOT(dotText: string): PetriNetInput {
+function parseDOT(dotText: string): PetriNet {
     // Remove comments and compress whitespace
     const src = dotText
         .replace(/\/\/.*$/gm, '')
@@ -200,7 +219,7 @@ function parseDOT(dotText: string): PetriNetInput {
 
     const places: Array<{ id: string; label?: string; tokens?: number }> = [];
     const transitions: Array<{ id: string; label?: string }> = [];
-    const arcs: Array<{ from: string; to: string; weight?: number }> = [];
+    const arcs: Array<{ sourceId: string; targetId: string; weight?: number }> = [];
     const nodeTypes = new Map<string, 'place' | 'transition'>();
     const nodeLabels = new Map<string, string | undefined>();
     const nodeTokens = new Map<string, number | undefined>();
@@ -234,8 +253,8 @@ function parseDOT(dotText: string): PetriNetInput {
     const edgeRegex = /(?:"([^"]+)"|([A-Za-z0-9_]+))\s*->\s*(?:"([^"]+)"|([A-Za-z0-9_]+))(\s*\[(.*?)\])?\s*;/g;
     let em: RegExpExecArray | null;
     while ((em = edgeRegex.exec(src))) {
-        const from = em[1] ?? em[2];
-        const to = em[3] ?? em[4];
+        const sourceId = em[1] ?? em[2];
+        const targetId = em[3] ?? em[4];
         const attrsRaw = em[6] ?? '';
         let weight: number | undefined;
         if (attrsRaw) {
@@ -250,7 +269,7 @@ function parseDOT(dotText: string): PetriNetInput {
             const w = toIntSafe(lw ?? undefined);
             if (typeof w === 'number' && w > 1) weight = w;
         }
-        arcs.push(weight ? { from, to, weight } : { from, to });
+        arcs.push(weight ? { sourceId, targetId, weight } : { sourceId, targetId });
         // If types are unknown, infer from existing node declarations later
     }
 
@@ -273,7 +292,7 @@ function parseDOT(dotText: string): PetriNetInput {
         }
     }
 
-    return { places, transitions, arcs };
+    return normalizeAndValidate({ places, transitions, arcs });
 }
 
 function extractTokens(label?: string): number | undefined {
@@ -288,7 +307,7 @@ function extractTokens(label?: string): number | undefined {
 }
 
 // --- Mermaid parsing (flowchart) ---
-function parseMermaid(mmText: string): PetriNetInput {
+function parseMermaid(mmText: string): PetriNet {
     const lines = mmText
         .replace(/%%.*$/gm, '')
         .split(/\r?\n/)
@@ -297,7 +316,7 @@ function parseMermaid(mmText: string): PetriNetInput {
 
     const places: Array<{ id: string; label?: string; tokens?: number }> = [];
     const transitions: Array<{ id: string; label?: string }> = [];
-    const arcs: Array<{ from: string; to: string; weight?: number }> = [];
+    const arcs: Array<{ sourceId: string; targetId: string; weight?: number }> = [];
     const nodeTypes = new Map<string, 'place' | 'transition'>();
     const nodeLabels = new Map<string, string | undefined>();
     const nodeTokens = new Map<string, number | undefined>();
@@ -339,12 +358,12 @@ function parseMermaid(mmText: string): PetriNetInput {
             const right = edge[3];
             addNodeFromToken(left);
             addNodeFromToken(right);
-            const fromId = (left.match(/^([A-Za-z0-9_]+)/) || [])[1];
-            const toId = (right.match(/^([A-Za-z0-9_]+)/) || [])[1];
+            const sourceId = (left.match(/^([A-Za-z0-9_]+)/) || [])[1];
+            const targetId = (right.match(/^([A-Za-z0-9_]+)/) || [])[1];
             let weight: number | undefined;
             const w = toIntSafe(label ?? undefined);
             if (typeof w === 'number' && w > 1) weight = w;
-            arcs.push(weight ? { from: fromId, to: toId, weight } : { from: fromId, to: toId });
+            arcs.push(weight ? { sourceId, targetId, weight } : { sourceId, targetId });
             continue;
         }
         // Standalone node declaration
@@ -357,7 +376,7 @@ function parseMermaid(mmText: string): PetriNetInput {
 
     // Finalize nodes inferred from arcs
     const ids = new Set<string>();
-    for (const a of arcs) { ids.add(a.from); ids.add(a.to); }
+    for (const a of arcs) { ids.add(a.sourceId); ids.add(a.targetId); }
     for (const k of nodeTypes.keys()) ids.add(k);
     for (const k of nodeLabels.keys()) ids.add(k);
     for (const id of ids) {
@@ -376,7 +395,7 @@ function parseMermaid(mmText: string): PetriNetInput {
         }
     }
 
-    return { places, transitions, arcs };
+    return normalizeAndValidate({ places, transitions, arcs });
 }
 
 function cleanLabel(label?: string): string | undefined {
@@ -385,4 +404,33 @@ function cleanLabel(label?: string): string | undefined {
     // Strip matching quotes
     s = s.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
     return s;
+}
+
+function pickLabel(value: unknown, fallback: string): string {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length) return trimmed;
+    }
+    return fallback;
+}
+
+function toNonNegativeInt(value: unknown, fallback: number): number {
+    const parsed = toInteger(value);
+    if (parsed == null) return fallback;
+    return Math.max(0, parsed);
+}
+
+function toPositiveInt(value: unknown, fallback: number): number {
+    const parsed = toInteger(value);
+    if (parsed == null) return fallback;
+    return Math.max(1, parsed);
+}
+
+function toInteger(value: unknown): number | null {
+    if (typeof value === 'number' && isFinite(value)) return Math.trunc(value);
+    if (typeof value === 'string' && value.trim().length) {
+        const n = Number(value);
+        if (Number.isFinite(n)) return Math.trunc(n);
+    }
+    return null;
 }

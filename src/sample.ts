@@ -1,11 +1,11 @@
-import type { PetriNetInput } from './utils/types';
+import type { PetriNet } from './utils/types';
 
-export const samplePetriNet: PetriNetInput = {
+export const samplePetriNet: PetriNet = {
     places: [
         { id: 'P0', label: 'Start', tokens: 1 },
-        { id: 'P1', label: 'Queued' },
-        { id: 'P2', label: 'Processing' },
-        { id: 'P3', label: 'Done' }
+        { id: 'P1', label: 'Queued', tokens: 0 },
+        { id: 'P2', label: 'Processing', tokens: 0 },
+        { id: 'P3', label: 'Done', tokens: 0 }
     ],
     transitions: [
         { id: 'T0', label: 'Enqueue' },
@@ -13,11 +13,11 @@ export const samplePetriNet: PetriNetInput = {
         { id: 'T2', label: 'Finish' }
     ],
     arcs: [
-        { from: 'P0', to: 'T0' },
-        { from: 'T0', to: 'P1' },
-        { from: 'P1', to: 'T1' },
-        { from: 'T1', to: 'P2' },
-        { from: 'P2', to: 'T2' },
-        { from: 'T2', to: 'P3' }
+        { sourceId: 'P0', targetId: 'T0' },
+        { sourceId: 'T0', targetId: 'P1' },
+        { sourceId: 'P1', targetId: 'T1' },
+        { sourceId: 'T1', targetId: 'P2' },
+        { sourceId: 'P2', targetId: 'T2' },
+        { sourceId: 'T2', targetId: 'P3' }
     ]
 };

@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { applyTransitions, replayTransitionsDetailed } from '../src/utils/simulate';
 import { toDot } from '../src/utils/toDot';
-import type { PetriNetInput } from '../src/utils/types';
+import type { PetriNet } from '../src/utils/types';
 
 describe('applyTransitions', () => {
     it('fires enabled transitions and updates tokens', () => {
-        const model: PetriNetInput = {
+        const model: PetriNet = {
             places: [
-                { id: 'P0', tokens: 1 },
-                { id: 'P1' },
+                { id: 'P0', label: 'P0', tokens: 1 },
+                { id: 'P1', label: 'P1', tokens: 0 },
             ],
             transitions: [
-                { id: 'T0' },
+                { id: 'T0', label: 'T0' },
             ],
             arcs: [
-                { from: 'P0', to: 'T0' },
-                { from: 'T0', to: 'P1' },
+                { sourceId: 'P0', targetId: 'T0' },
+                { sourceId: 'T0', targetId: 'P1' },
             ],
         };
 
@@ -27,19 +27,25 @@ describe('applyTransitions', () => {
     });
 
     it('throws when not enabled in strict mode', () => {
-        const model: PetriNetInput = {
-            places: [{ id: 'P0', tokens: 0 }],
-            transitions: [{ id: 'T0' }],
-            arcs: [{ from: 'P0', to: 'T0' }],
+        const model: PetriNet = {
+            places: [{ id: 'P0', label: 'P0', tokens: 0 }],
+            transitions: [{ id: 'T0', label: 'T0' }],
+            arcs: [{ sourceId: 'P0', targetId: 'T0' }],
         };
         expect(() => applyTransitions(model, ['T0'], { strict: true })).toThrow();
     });
 
     it('skips invalid firings in non-strict and surfaces warnings; label is rendered', () => {
-        const model: PetriNetInput = {
-            places: [{ id: 'P0', tokens: 1 }, { id: 'P1' }],
-            transitions: [{ id: 'T0' }, { id: 'T1' }],
-            arcs: [{ from: 'P0', to: 'T0' }, { from: 'T0', to: 'P1' }],
+        const model: PetriNet = {
+            places: [
+                { id: 'P0', label: 'P0', tokens: 1 },
+                { id: 'P1', label: 'P1', tokens: 0 }
+            ],
+            transitions: [
+                { id: 'T0', label: 'T0' },
+                { id: 'T1', label: 'T1' }
+            ],
+            arcs: [{ sourceId: 'P0', targetId: 'T0' }, { sourceId: 'T0', targetId: 'P1' }],
         };
         const seq = ['BAD', 'T0', 'T1'];
         const res = replayTransitionsDetailed(model, seq, { strict: false });

@@ -1,9 +1,9 @@
-import type { PetriNetInput } from './types';
+import type { PetriNet } from './types';
 
 /**
- * Convert a PetriNetInput model to minimal PNML string.
+ * Convert a PetriNet model to minimal PNML string.
  */
-export function toPNML(model: PetriNetInput): string {
+export function toPNML(model: PetriNet): string {
     const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const lines: string[] = [];
     lines.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -27,7 +27,7 @@ export function toPNML(model: PetriNetInput): string {
         lines.push('    </transition>');
     }
     for (const a of model.arcs) {
-        lines.push(`    <arc id="${esc(a.from)}_to_${esc(a.to)}" source="${esc(a.from)}" target="${esc(a.to)}">`);
+        lines.push(`    <arc id="${esc(a.sourceId)}_to_${esc(a.targetId)}" source="${esc(a.sourceId)}" target="${esc(a.targetId)}">`);
         const w = a.weight && a.weight !== 1 ? a.weight : 1;
         lines.push('      <inscription><text>{' + w + '}</text></inscription>');
         lines.push('    </arc>');

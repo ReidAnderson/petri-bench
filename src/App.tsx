@@ -10,14 +10,14 @@ import { toDot, type RankDir } from './utils/toDot';
 import { toMermaid } from './utils/toMermaid';
 import { toPNML } from './utils/toPNML';
 import { resolveTransitionRefs } from './utils/trace';
-import type { AlignmentMove, PetriNetInput } from './utils/types';
+import type { AlignmentMove, Arc, PetriNet, Place, Transition } from './utils/types';
 import { useDebounce } from './utils/useDebounce';
 
 type DataFormat = 'json' | 'pnml' | 'dot' | 'mermaid';
 
 function computePetriNet(text: string, transitions: string, rankdir: RankDir, inputFormat: DataFormat) {
     try {
-        const parsed: PetriNetInput = parsePetriNetByFormat(text, inputFormat);
+        const parsed: PetriNet = parsePetriNetByFormat(text, inputFormat);
         // parse transitions sequence: accept comma/space/line separated ids or labels
         const refs = transitions
             .split(/[\,\n\r\t]+/)
@@ -49,6 +49,9 @@ export default function App() {
     const [alignMoves, setAlignMoves] = useState<AlignmentMove[] | null>(null);
     const [alignCost, setAlignCost] = useState<number | null>(null);
     const [alignFitness, setAlignFitness] = useState<number | null>(null);
+    const [isPreviewCollapsed, setIsPreviewCollapsed] = useState(false);
+    const [isTransitionsCollapsed, setIsTransitionsCollapsed] = useState(false);
+    const [isAlignmentCollapsed, setIsAlignmentCollapsed] = useState(false);
 
     // Formatting panel state (input/view)
 
@@ -125,7 +128,7 @@ export default function App() {
 
     const onComputeAlignment = useCallback(() => {
         try {
-            const parsed: PetriNetInput = parsePetriNetByFormat(text, inputFormat);
+            const parsed: PetriNet = parsePetriNetByFormat(text, inputFormat);
             // Use raw refs (ids or labels) for alignment matching
             const refs = transitionsText
                 .split(/[\,\n\r\t]+/)
@@ -147,7 +150,7 @@ export default function App() {
     // --- Editing helpers ---
     const isEditableJSON = viewFormat === 'json' && inputFormat === 'json';
 
-    const tryParseModel = useCallback((t: string): PetriNetInput | null => {
+    const tryParseModel = useCallback((t: string): PetriNet | null => {
         try {
             return parsePetriNetByFormat(t, inputFormat);
         } catch {
@@ -157,16 +160,16 @@ export default function App() {
 
     const currentModel = useMemo(() => tryParseModel(text), [text, tryParseModel]);
 
-    const stringifyModel = (m: PetriNetInput) => JSON.stringify(m, null, 2);
+    const stringifyModel = (m: PetriNet) => JSON.stringify(m, null, 2);
 
-    const nextPlaceId = (m: PetriNetInput) => {
+    const nextPlaceId = (m: PetriNet) => {
         const base = 'P';
         const used = new Set(m.places.map(p => p.id));
         let n = 0;
         while (used.has(`${base}${n}`)) n++;
         return `${base}${n}`;
     };
-    const nextTransitionId = (m: PetriNetInput) => {
+    const nextTransitionId = (m: PetriNet) => {
         const base = 'T';
         const used = new Set(m.transitions.map(p => p.id));
         let n = 0;
@@ -189,8 +192,10 @@ export default function App() {
         } else if (openPanel === 'connect') {
             setConnDir('PT');
             setConnWeight('1');
-            setConnPlaceId(currentModel.places[0]?.id ?? '');
-            setConnTransId(currentModel.transitions[0]?.id ?? '');
+            const lastPlaceId = currentModel.places[currentModel.places.length - 1]?.id ?? '';
+            const lastTransId = currentModel.transitions[currentModel.transitions.length - 1]?.id ?? '';
+            setConnPlaceId(lastPlaceId);
+            setConnTransId(lastTransId);
             setTimeout(() => connPlaceRef.current?.focus(), 0);
         } else if (openPanel === 'removePlace') {
             setConnPlaceId(currentModel.places[0]?.id ?? '');
@@ -263,11 +268,10 @@ export default function App() {
             setError(`ID already exists: ${id}`);
             return;
         }
-        const tokens = Math.max(0, Number.isFinite(Number(placeTokens)) ? Number(placeTokens) : 0);
-        const place: any = { id };
-        if (placeLabel.trim()) place.label = placeLabel.trim();
-        if (tokens > 0) place.tokens = tokens;
-        const model: PetriNetInput = {
+        const tokens = Math.max(0, Number.isFinite(Number(placeTokens)) ? Math.trunc(Number(placeTokens)) : 0);
+        const label = placeLabel.trim() || id;
+        const place: Place = { id, label, tokens };
+        const model: PetriNet = {
             places: [...currentModel.places, place],
             transitions: currentModel.transitions.slice(),
             arcs: currentModel.arcs.slice(),
@@ -279,7 +283,8 @@ export default function App() {
         setOpenPanel('connect');
         setConnDir('PT');
         setConnPlaceId(id);
-        setConnTransId(currentModel.transitions[0]?.id ?? '');
+        const lastTransId = currentModel.transitions[currentModel.transitions.length - 1]?.id ?? '';
+        setConnTransId(lastTransId);
         setError(null);
     }, [currentModel, placeId, placeLabel, placeTokens]);
 
@@ -291,9 +296,9 @@ export default function App() {
             setError(`ID already exists: ${id}`);
             return;
         }
-        const t: any = { id };
-        if (transLabel.trim()) t.label = transLabel.trim();
-        const model: PetriNetInput = {
+        const label = transLabel.trim() || id;
+        const t: Transition = { id, label };
+        const model: PetriNet = {
             places: currentModel.places.slice(),
             transitions: [...currentModel.transitions, t],
             arcs: currentModel.arcs.slice(),
@@ -305,7 +310,8 @@ export default function App() {
         setOpenPanel('connect');
         setConnDir('TP');
         setConnTransId(id);
-        setConnPlaceId(currentModel.places[0]?.id ?? '');
+        const lastPlaceId = currentModel.places[currentModel.places.length - 1]?.id ?? '';
+        setConnPlaceId(lastPlaceId);
         setError(null);
     }, [currentModel, transId, transLabel]);
 
@@ -315,17 +321,17 @@ export default function App() {
         const tId = connTransId.trim();
         if (!pId || !tId) { setError('Select a place and a transition.'); return; }
         const weightVal = Math.max(1, Number.isFinite(Number(connWeight)) ? Number(connWeight) : 1);
-        const from = connDir === 'PT' ? pId : tId;
-        const to = connDir === 'PT' ? tId : pId;
+        const sourceId = connDir === 'PT' ? pId : tId;
+        const targetId = connDir === 'PT' ? tId : pId;
         // Prevent duplicate exact same arc (same from,to)
-        const exists = currentModel.arcs.some(a => a.from === from && a.to === to);
+        const exists = currentModel.arcs.some(a => a.sourceId === sourceId && a.targetId === targetId);
         if (exists) {
             setError('Arc already exists.');
             return;
         }
-        const newArc: any = { from, to };
+        const newArc: Arc = { sourceId, targetId };
         if (weightVal > 1) newArc.weight = weightVal;
-        const model: PetriNetInput = {
+        const model: PetriNet = {
             places: currentModel.places.slice(),
             transitions: currentModel.transitions.slice(),
             arcs: [...currentModel.arcs, newArc],
@@ -356,10 +362,10 @@ export default function App() {
             ? currentModel.places.some(p => p.id === targetId)
             : currentModel.transitions.some(t => t.id === targetId);
         if (!hasTarget) { setError(`${kind} not found: ${targetId}`); return; }
-        const nextModel: PetriNetInput = {
+        const nextModel: PetriNet = {
             places: kind === 'place' ? currentModel.places.filter(p => p.id !== targetId) : currentModel.places.slice(),
             transitions: kind === 'transition' ? currentModel.transitions.filter(t => t.id !== targetId) : currentModel.transitions.slice(),
-            arcs: currentModel.arcs.filter(a => a.from !== targetId && a.to !== targetId),
+            arcs: currentModel.arcs.filter(a => a.sourceId !== targetId && a.targetId !== targetId),
         };
         // push current text to history before mutating
         setHistory(h => (h.length >= maxHistory ? [...h.slice(1), text] : [...h, text]));
@@ -558,24 +564,46 @@ export default function App() {
                         onChange={(e) => setText(e.target.value)}
                         spellCheck={false}
                     />
-                    <div className="pane-header">View Preview ({viewFormat.toUpperCase()})</div>
-                    <textarea
-                        className="editor"
-                        value={displayText}
-                        readOnly
-                        spellCheck={false}
-                        style={{ ...styles.transitionsTextarea, height: 120 }}
-                    />
-                    <div className="pane-header">Transitions (IDs or labels, comma/space separated)</div>
-                    <textarea
-                        className="editor"
-                        data-testid="transitions-input"
-                        value={transitionsText}
-                        onChange={(e) => setTransitionsText(e.target.value)}
-                        placeholder="Example: T0, T1, T2"
-                        spellCheck={false}
-                        style={styles.transitionsTextarea}
-                    />
+                    <div className="pane-header" style={styles.collapsibleHeader}>
+                        <span>View Preview ({viewFormat.toUpperCase()})</span>
+                        <button
+                            style={btnStyle}
+                            onClick={() => setIsPreviewCollapsed((prev) => !prev)}
+                            aria-expanded={!isPreviewCollapsed}
+                        >
+                            {isPreviewCollapsed ? 'Expand' : 'Collapse'}
+                        </button>
+                    </div>
+                    {!isPreviewCollapsed && (
+                        <textarea
+                            className="editor"
+                            value={displayText}
+                            readOnly
+                            spellCheck={false}
+                            style={{ ...styles.transitionsTextarea, height: 120 }}
+                        />
+                    )}
+                    <div className="pane-header" style={styles.collapsibleHeader}>
+                        <span>Transitions (IDs or labels, comma/space separated)</span>
+                        <button
+                            style={btnStyle}
+                            onClick={() => setIsTransitionsCollapsed((prev) => !prev)}
+                            aria-expanded={!isTransitionsCollapsed}
+                        >
+                            {isTransitionsCollapsed ? 'Expand' : 'Collapse'}
+                        </button>
+                    </div>
+                    {!isTransitionsCollapsed && (
+                        <textarea
+                            className="editor"
+                            data-testid="transitions-input"
+                            value={transitionsText}
+                            onChange={(e) => setTransitionsText(e.target.value)}
+                            placeholder="Example: T0, T1, T2"
+                            spellCheck={false}
+                            style={styles.transitionsTextarea}
+                        />
+                    )}
                     <div style={styles.alignmentControls}>
                         <button onClick={onComputeAlignment} style={btnStyle}>Calculate Alignment</button>
                         {alignFitness != null && (
@@ -609,12 +637,23 @@ export default function App() {
                     )}
                     {alignMoves && alignMoves.length > 0 && (
                         <div style={styles.alignmentContainer}>
-                            <div style={styles.alignmentHeader}>Alignment</div>
-                            <ol style={styles.alignmentList}>
-                                {alignMoves.map((m, i) => (
-                                    <li key={i}><code>{m.moveType}</code>: {m.activity}</li>
-                                ))}
-                            </ol>
+                            <div style={styles.collapsibleHeader}>
+                                <span style={styles.alignmentHeader}>Alignment</span>
+                                <button
+                                    style={btnStyle}
+                                    onClick={() => setIsAlignmentCollapsed((prev) => !prev)}
+                                    aria-expanded={!isAlignmentCollapsed}
+                                >
+                                    {isAlignmentCollapsed ? 'Expand' : 'Collapse'}
+                                </button>
+                            </div>
+                            {!isAlignmentCollapsed && (
+                                <ol style={styles.alignmentList}>
+                                    {alignMoves.map((m, i) => (
+                                        <li key={i}><code>{m.moveType}</code>: {m.activity}</li>
+                                    ))}
+                                </ol>
+                            )}
                         </div>
                     )}
                     {error && <div className="error">{error}</div>}
@@ -734,6 +773,12 @@ const styles: Record<string, React.CSSProperties> = {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
+    },
+    collapsibleHeader: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
     },
     paneHeaderControls: {
         marginLeft: 'auto',

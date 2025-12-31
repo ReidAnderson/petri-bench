@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { resolveTransitionRefs } from '../src/utils/trace';
-import type { PetriNetInput } from '../src/utils/types';
+import type { PetriNet } from '../src/utils/types';
 
 describe('resolveTransitionRefs', () => {
-    const model: PetriNetInput = {
+    const model: PetriNet = {
         places: [],
         transitions: [
             { id: 'T0', label: 'A' },
@@ -21,7 +21,7 @@ describe('resolveTransitionRefs', () => {
     });
 
     it('resolves labels when unique', () => {
-        const uniqModel: PetriNetInput = {
+        const uniqModel: PetriNet = {
             ...model, transitions: [
                 { id: 'T0', label: 'A' },
                 { id: 'T1', label: 'B' },

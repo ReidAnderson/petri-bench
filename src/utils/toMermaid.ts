@@ -1,12 +1,12 @@
 import type { RankDir } from './toDot';
-import type { PetriNetInput } from './types';
+import type { PetriNet } from './types';
 
 export type ToMermaidOptions = { direction?: RankDir };
 
 /**
- * Convert a PetriNetInput model to Mermaid flowchart syntax.
+ * Convert a PetriNet model to Mermaid flowchart syntax.
  */
-export function toMermaid(model: PetriNetInput, opts?: ToMermaidOptions): string {
+export function toMermaid(model: PetriNet, opts?: ToMermaidOptions): string {
     const dir = mapDir(opts?.direction ?? 'LR');
     const lines: string[] = [];
     lines.push(`flowchart ${dir}`);
@@ -23,7 +23,7 @@ export function toMermaid(model: PetriNetInput, opts?: ToMermaidOptions): string
     // Arcs
     for (const a of model.arcs) {
         const w = a.weight && a.weight !== 1 ? `|${a.weight}|` : '';
-        lines.push(`${a.from} --${w}--> ${a.to}`);
+        lines.push(`${a.sourceId} --${w}--> ${a.targetId}`);
     }
     return lines.join('\n');
 }

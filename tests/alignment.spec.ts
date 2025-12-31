@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { samplePetriNet } from '../src/sample';
 import { computeAlignmentFitness, findOptimalAlignment } from '../src/utils/alignment';
-import type { PetriNetInput } from '../src/utils/types';
+import type { PetriNet } from '../src/utils/types';
 
-const simpleNet: PetriNetInput = samplePetriNet;
+const simpleNet: PetriNet = samplePetriNet;
 
 describe('findOptimalAlignment', () => {
     it('perfect sync on matching trace', () => {

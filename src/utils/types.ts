@@ -1,21 +1,21 @@
 export type Place = {
     id: string;
-    label?: string;
-    tokens?: number;
+    label: string;
+    tokens: number;
 };
 
 export type Transition = {
     id: string;
-    label?: string;
+    label: string;
 };
 
 export type Arc = {
-    from: string;
-    to: string;
+    sourceId: string;
+    targetId: string;
     weight?: number;
 };
 
-export type PetriNetInput = {
+export type PetriNet = {
     places: Place[];
     transitions: Transition[];
     arcs: Arc[];

@@ -1,4 +1,4 @@
-import type { Arc, PetriNetInput, Place } from './types';
+import type { Arc, PetriNet, Place } from './types';
 
 export type ReplayOptions = {
     /** If true, stop and throw on the first error (default). If false, skip invalid/not-enabled steps. */
@@ -6,7 +6,7 @@ export type ReplayOptions = {
 };
 
 export type ReplayResult = {
-    model: PetriNetInput;
+    model: PetriNet;
     warnings: string[];
 };
 
@@ -14,7 +14,7 @@ export type ReplayResult = {
  * Apply a sequence of transition IDs to the Petri net, returning a new net with updated place tokens.
  * Throws if a transition id is unknown or not enabled at a step (when strict=true).
  */
-export function applyTransitions(model: PetriNetInput, sequence: string[], options?: ReplayOptions): PetriNetInput {
+export function applyTransitions(model: PetriNet, sequence: string[], options?: ReplayOptions): PetriNet {
     const res = replayTransitionsDetailed(model, sequence, options);
     if (res.warnings.length && options?.strict === false) {
         // eslint-disable-next-line no-console
@@ -24,7 +24,7 @@ export function applyTransitions(model: PetriNetInput, sequence: string[], optio
 }
 
 /** Detailed replay with warnings collected. */
-export function replayTransitionsDetailed(model: PetriNetInput, sequence: string[], options?: ReplayOptions): ReplayResult {
+export function replayTransitionsDetailed(model: PetriNet, sequence: string[], options?: ReplayOptions): ReplayResult {
     const strict = options?.strict !== false ? true : false;
 
     // Build lookup maps
@@ -74,7 +74,7 @@ export function replayTransitionsDetailed(model: PetriNetInput, sequence: string
 
     // Build new places array with updated tokens
     const places: Place[] = model.places.map((p) => ({ ...p, tokens: tokens.get(p.id) ?? 0 }));
-    const updated: PetriNetInput = { places, transitions: model.transitions.slice(), arcs: model.arcs.slice() };
+    const updated: PetriNet = { places, transitions: model.transitions.slice(), arcs: model.arcs.slice() };
     return { model: updated, warnings };
 }
 
@@ -86,9 +86,9 @@ function groupInputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<s
     const m = new Map<string, Array<{ place: string; weight: number }>>();
     for (const a of arcs) {
         // Input arcs are those from place -> transition
-        if (placeSet.has(a.from) && transitionSet.has(a.to)) {
+        if (placeSet.has(a.sourceId) && transitionSet.has(a.targetId)) {
             const w = weightOf(a);
-            add(m, a.to, { place: a.from, weight: w });
+            add(m, a.targetId, { place: a.sourceId, weight: w });
         }
     }
     return m;
@@ -98,9 +98,9 @@ function groupOutputArcs(arcs: Arc[], placeSet: Set<string>, transitionSet: Set<
     const m = new Map<string, Array<{ place: string; weight: number }>>();
     for (const a of arcs) {
         // Output arcs are those from transition -> place
-        if (transitionSet.has(a.from) && placeSet.has(a.to)) {
+        if (transitionSet.has(a.sourceId) && placeSet.has(a.targetId)) {
             const w = weightOf(a);
-            add(m, a.from, { place: a.to, weight: w });
+            add(m, a.sourceId, { place: a.targetId, weight: w });
         }
     }
     return m;
