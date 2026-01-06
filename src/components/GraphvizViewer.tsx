@@ -100,12 +100,10 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomCh
             gvRef.current?.fit();
         },
         exportSVG() {
-            const svg = containerRef.current?.querySelector('svg');
-            if (!svg) return null;
-            const clone = svg.cloneNode(true) as SVGSVGElement;
-            clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-            const serializer = new XMLSerializer();
-            return serializer.serializeToString(clone);
+            const container = containerRef.current;
+            const svgEl = container?.querySelector('svg') as SVGSVGElement | null;
+            if (!container || !svgEl) return null;
+            return prepareSVGForExport(svgEl, container).svgString;
         },
         /**
          * Export the current SVG to a PNG blob.
@@ -114,19 +112,18 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomCh
          * The canvas is scaled by devicePixelRatio for better quality on high-DPI screens.
          */
         async exportPNG() {
-            const svgEl = containerRef.current?.querySelector('svg') as SVGSVGElement | null;
-            if (!svgEl) return null;
-            const serializer = new XMLSerializer();
-            const svgString = serializer.serializeToString(svgEl);
-            const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const container = containerRef.current;
+            const svgEl = container?.querySelector('svg') as SVGSVGElement | null;
+            if (!container || !svgEl) return null;
+            const prepared = prepareSVGForExport(svgEl, container);
+            const blob = new Blob([prepared.svgString], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             try {
                 const img = await loadImage(url);
-                const { width, height } = getSVGSize(svgEl, containerRef.current!);
-                const scale = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+                const targetScale = getExportScale(prepared.width, prepared.height);
                 const canvas = document.createElement('canvas');
-                canvas.width = Math.ceil(width * scale);
-                canvas.height = Math.ceil(height * scale);
+                canvas.width = Math.ceil(prepared.width * targetScale);
+                canvas.height = Math.ceil(prepared.height * targetScale);
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return null;
                 ctx.fillStyle = '#ffffff';
@@ -142,28 +139,126 @@ export const GraphvizViewer = forwardRef<GraphvizHandle, Props>(({ dot, onZoomCh
     return <div className="graphviz-container" ref={containerRef} />;
 });
 
+const EXPORT_BASE_SCALE = 4;
+const MAX_EXPORT_SCALE = 6;
+const MAX_EXPORT_DIMENSION = 8192;
+
+type GraphDatum = {
+    attributes?: Record<string, string>;
+    translation?: { x: number; y: number };
+    scale?: number;
+};
+
+type PreparedSVG = {
+    svgString: string;
+    width: number;
+    height: number;
+};
+
 function loadImage(src: string): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
         const img = new Image();
+        img.decoding = 'async';
         img.onload = () => resolve(img);
         img.onerror = (e) => reject(e);
         img.src = src;
     });
 }
 
-function getSVGSize(svg: SVGSVGElement, container: HTMLElement): { width: number; height: number } {
-    const wAttr = svg.getAttribute('width');
-    const hAttr = svg.getAttribute('height');
-    if (wAttr && hAttr) {
-        const w = parseFloat(wAttr);
-        const h = parseFloat(hAttr);
-        if (!isNaN(w) && !isNaN(h)) return { width: w, height: h };
+function prepareSVGForExport(svgEl: SVGSVGElement, container: HTMLElement): PreparedSVG {
+    const clone = svgEl.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    resetGraphTransform(svgEl, clone);
+    ensureViewBox(clone, container);
+    const size = getSVGSize(clone, container);
+    clone.setAttribute('width', String(size.width));
+    clone.setAttribute('height', String(size.height));
+    const serializer = new XMLSerializer();
+    return { svgString: serializer.serializeToString(clone), width: size.width, height: size.height };
+}
+
+function resetGraphTransform(sourceSvg: SVGSVGElement, targetSvg: SVGSVGElement) {
+    const sourceGraph = sourceSvg.querySelector('g');
+    const targetGraph = targetSvg.querySelector('g');
+    if (!sourceGraph || !targetGraph) return;
+    const data = (sourceGraph as any).__data__ as GraphDatum | undefined;
+    const baseTransform = data?.attributes?.transform;
+    if (baseTransform) {
+        targetGraph.setAttribute('transform', baseTransform);
+        return;
     }
+    if (data?.translation) {
+        const scale = typeof data.scale === 'number' ? data.scale : 1;
+        targetGraph.setAttribute('transform', `translate(${data.translation.x},${data.translation.y}) scale(${scale})`);
+    } else {
+        targetGraph.removeAttribute('transform');
+    }
+}
+
+function ensureViewBox(svg: SVGSVGElement, container: HTMLElement) {
+    if (svg.getAttribute('viewBox')) return;
+    const intrinsic = getIntrinsicSize(svg, container);
+    svg.setAttribute('viewBox', `0 0 ${intrinsic.width} ${intrinsic.height}`);
+}
+
+function getSVGSize(svg: SVGSVGElement, container: HTMLElement): { width: number; height: number } {
     const vb = svg.getAttribute('viewBox');
     if (vb) {
-        const parts = vb.split(/\s+/).map((p) => parseFloat(p)).filter((n) => !isNaN(n));
-        if (parts.length === 4) return { width: parts[2], height: parts[3] };
+        const parts = vb
+            .split(/\s+/)
+            .map((p) => parseFloat(p))
+            .filter((n) => !isNaN(n));
+        if (parts.length === 4) {
+            return { width: Math.max(parts[2], 1), height: Math.max(parts[3], 1) };
+        }
+    }
+    return getIntrinsicSize(svg, container);
+}
+
+function getIntrinsicSize(svg: SVGSVGElement, container: HTMLElement): { width: number; height: number } {
+    const widthAttr = parseLength(svg.getAttribute('width'));
+    const heightAttr = parseLength(svg.getAttribute('height'));
+    if (widthAttr && heightAttr) {
+        return { width: widthAttr, height: heightAttr };
     }
     const rect = container.getBoundingClientRect();
-    return { width: rect.width || 1000, height: rect.height || 600 };
+    if (rect.width && rect.height) {
+        return { width: rect.width, height: rect.height };
+    }
+    return { width: 1000, height: 600 };
+}
+
+function parseLength(value: string | null): number | null {
+    if (!value) return null;
+    const match = value.trim().match(/^([0-9.]+)([a-z%]*)$/i);
+    if (!match) return null;
+    const amount = parseFloat(match[1]);
+    if (!isFinite(amount)) return null;
+    const unit = match[2]?.toLowerCase();
+    switch (unit) {
+        case 'pt':
+            return amount * (96 / 72);
+        case 'pc':
+            return amount * 16;
+        case 'mm':
+            return amount * (96 / 25.4);
+        case 'cm':
+            return amount * (96 / 2.54);
+        case 'in':
+            return amount * 96;
+        case 'px':
+        case '':
+            return amount;
+        default:
+            return null;
+    }
+}
+
+function getExportScale(width: number, height: number): number {
+    const deviceScale = (window.devicePixelRatio || 1) * 2;
+    const desired = Math.max(EXPORT_BASE_SCALE, deviceScale);
+    const maxByWidth = MAX_EXPORT_DIMENSION / Math.max(width, 1);
+    const maxByHeight = MAX_EXPORT_DIMENSION / Math.max(height, 1);
+    const safeMax = Math.max(1, Math.min(maxByWidth, maxByHeight));
+    return Math.max(1, Math.min(desired, MAX_EXPORT_SCALE, safeMax));
 }
